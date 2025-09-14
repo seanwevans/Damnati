@@ -47,7 +47,7 @@ __device__ __host__ __forceinline__ T dclamp(T v, T lo, T hi) {
 struct AgentParams {
   int strat;        // Strategy enum
   float epsilon;    // N-gram ε
-  int depth;        // N-gram depth (<=3 -> 64 states)
+  int depth;        // N-gram depth (determines memory size)
   float gtf_forget; // GTFT forgiveness prob
 };
 
@@ -77,22 +77,44 @@ struct PlayerState {
   int last = -1;
   int opp_last = -1;
   int defect_seen = 0;
-  int depth = 0; // 0..3
+  int depth = 0;         // current depth
   float epsilon = 0.0f;
   unsigned int state = 0; // encoded history (2 bits/pair)
-  int counts[64][2];      // visit counts
-  float q[64][2];         // Q-values
+  int *counts = nullptr;  // visit counts [n_states * 2]
+  float *q = nullptr;     // Q-values [n_states * 2]
+  int n_states = 0;       // number of states allocated
   float gtft_forget = 0.1f;
 
   __device__ __forceinline__ void init_ngram(int d, float eps) {
     depth = d;
     epsilon = eps;
     state = 0u;
-#pragma unroll
-    for (int s = 0; s < 64; ++s) {
-      counts[s][0] = counts[s][1] = 0;
-      q[s][0] = q[s][1] = 0.0f;
+    int req = 1 << (2 * d);
+    if (req != n_states) {
+      if (counts)
+        free(counts);
+      if (q)
+        free(q);
+      counts = (int *)malloc(sizeof(int) * req * 2);
+      q = (float *)malloc(sizeof(float) * req * 2);
+      n_states = req;
     }
+    for (int i = 0; i < n_states * 2; ++i) {
+      counts[i] = 0;
+      q[i] = 0.0f;
+    }
+  }
+
+  __device__ __forceinline__ void free_ngram() {
+    if (counts) {
+      free(counts);
+      counts = nullptr;
+    }
+    if (q) {
+      free(q);
+      q = nullptr;
+    }
+    n_states = 0;
   }
 };
 
@@ -103,11 +125,11 @@ __device__ __forceinline__ int encode_pair(int my, int opp) {
 __device__ __forceinline__ int ngram_choose(PlayerState &p, uint64_t seed,
                                             int i, int j, int r, int who) {
   if (p.depth <= 0) {
-    return (p.q[0][C] >= p.q[0][D]) ? C : D;
+    return (p.q[0 * 2 + C] >= p.q[0 * 2 + D]) ? C : D;
   }
   if (rng01(seed, i, j, r, who) < p.epsilon)
     return (rng01(seed, i, j, r, who + 2) < 0.5f ? C : D);
-  return (p.q[p.state][C] >= p.q[p.state][D]) ? C : D;
+  return (p.q[p.state * 2 + C] >= p.q[p.state * 2 + D]) ? C : D;
 }
 
 __device__ __forceinline__ void ngram_update(PlayerState &p, int my, int opp,
@@ -115,9 +137,9 @@ __device__ __forceinline__ void ngram_update(PlayerState &p, int my, int opp,
   const int mask = (p.depth == 0) ? 0 : ((1 << (2 * p.depth)) - 1);
   const int s = (p.depth == 0) ? 0 : p.state;
   int a = my;
-  int cnt = ++p.counts[s][a];
-  float oldq = p.q[s][a];
-  p.q[s][a] = oldq + (float(reward) - oldq) / float(cnt);
+  int cnt = ++p.counts[s * 2 + a];
+  float oldq = p.q[s * 2 + a];
+  p.q[s * 2 + a] = oldq + (float(reward) - oldq) / float(cnt);
   if (p.depth > 0) {
     unsigned int np = ((p.state << 2) | encode_pair(my, opp)) & (unsigned)mask;
     p.state = np;
@@ -183,9 +205,9 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
   B.gtft_forget = Bj.gtf_forget;
 
   if (A.strat == NGRAM)
-    A.init_ngram(dmin(Ai.depth, 3), Ai.epsilon);
+    A.init_ngram(Ai.depth, Ai.epsilon);
   if (B.strat == NGRAM)
-    B.init_ngram(dmin(Bj.depth, 3), Bj.epsilon);
+    B.init_ngram(Bj.depth, Bj.epsilon);
 
   int scoreA = 0, scoreB = 0;
 
@@ -217,6 +239,11 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
 
   atomicAdd(&scores[i], scoreA);
   atomicAdd(&scores[j], scoreB);
+
+  if (A.strat == NGRAM)
+    A.free_ngram();
+  if (B.strat == NGRAM)
+    B.free_ngram();
 }
 
 struct Config {
@@ -224,7 +251,7 @@ struct Config {
   int rounds = 200;
   uint64_t seed = 1234567ULL;
   float p_ngram = 0.5f; // fraction of N-gram learners
-  int depth = 3;        // N-gram depth (<=3)
+  int depth = 3;        // N-gram depth
   float epsilon = 0.1f; // N-gram ε
   float gtft_p = 0.1f;  // GTFT forgiveness
 };
@@ -255,7 +282,7 @@ void parse_cli(int argc, char **argv, Config &cfg) {
     }
   }
   cfg.p_ngram = dclamp(cfg.p_ngram, 0.0f, 1.0f);
-  cfg.depth = dclamp(cfg.depth, 0, 3);
+  cfg.depth = dmax(0, cfg.depth);
 }
 
 static const Strategy classics[12] = {AC,     AD,  TFT,  GTFT,   GRIM,   RANDOM,
