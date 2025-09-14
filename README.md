@@ -31,7 +31,7 @@ Run the simulator and adjust parameters using command line flags:
 - `--rounds R`   – number of rounds per match (default: 200)
 - `--seed S`     – RNG seed (default: 1234567)
 - `--p-ngram F`  – fraction of agents using the N-gram strategy (default: 0.5)
-- `--depth D`    – N-gram history depth, up to 3 (default: 3)
+- `--depth D`    – N-gram history depth (default: 3)
 - `--epsilon E`  – exploration rate for N-gram learners (default: 0.1)
 - `--gtft P`     – forgiveness probability for Generous Tit for Tat (default: 0.1)
 
