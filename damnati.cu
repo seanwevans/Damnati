@@ -10,14 +10,14 @@
 #include <getopt.h>
 #include <vector>
 
-#define CUDA_CHECK(call)                                                     \
-  do {                                                                      \
-    cudaError_t err = call;                                                 \
-    if (err != cudaSuccess) {                                               \
-      std::fprintf(stderr, "CUDA error at %s:%d: %s\n", __FILE__, __LINE__,  \
-                   cudaGetErrorString(err));                                \
-      std::exit(EXIT_FAILURE);                                              \
-    }                                                                       \
+#define CUDA_CHECK(call)                                                       \
+  do {                                                                         \
+    cudaError_t err = call;                                                    \
+    if (err != cudaSuccess) {                                                  \
+      std::fprintf(stderr, "CUDA error at %s:%d: %s\n", __FILE__, __LINE__,    \
+                   cudaGetErrorString(err));                                   \
+      std::exit(EXIT_FAILURE);                                                 \
+    }                                                                          \
   } while (0)
 
 // Payoffs
@@ -88,7 +88,7 @@ struct PlayerState {
   int last = -1;
   int opp_last = -1;
   int defect_seen = 0;
-  int depth = 0;         // current depth
+  int depth = 0; // current depth
   float epsilon = 0.0f;
   unsigned int state = 0; // encoded history (2 bits/pair)
   int *counts = nullptr;  // visit counts [n_states * 2]
