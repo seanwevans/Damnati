@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <getopt.h>
 #include <vector>
 
 // Payoffs
@@ -228,30 +229,51 @@ struct Config {
   float epsilon = 0.1f; // N-gram ε
   float gtft_p = 0.1f;  // GTFT forgiveness
 };
-static bool eq(const char *a, const char *b) { return std::strcmp(a, b) == 0; }
 
 void parse_cli(int argc, char **argv, Config &cfg) {
-  for (int k = 1; k < argc; ++k) {
-    if (eq(argv[k], "--agents") && k + 1 < argc)
-      cfg.n_agents = std::atoi(argv[++k]);
-    else if (eq(argv[k], "--rounds") && k + 1 < argc)
-      cfg.rounds = std::atoi(argv[++k]);
-    else if (eq(argv[k], "--seed") && k + 1 < argc)
-      cfg.seed = std::strtoull(argv[++k], nullptr, 10);
-    else if (eq(argv[k], "--p-ngram") && k + 1 < argc)
-      cfg.p_ngram = std::atof(argv[++k]);
-    else if (eq(argv[k], "--depth") && k + 1 < argc)
-      cfg.depth = std::atoi(argv[++k]);
-    else if (eq(argv[k], "--epsilon") && k + 1 < argc)
-      cfg.epsilon = std::atof(argv[++k]);
-    else if (eq(argv[k], "--gtft") && k + 1 < argc)
-      cfg.gtft_p = std::atof(argv[++k]);
-    else if (eq(argv[k], "--help")) {
+  static const struct option long_opts[] = {
+      {"agents", required_argument, nullptr, 'a'},
+      {"rounds", required_argument, nullptr, 'r'},
+      {"seed", required_argument, nullptr, 's'},
+      {"p-ngram", required_argument, nullptr, 'p'},
+      {"depth", required_argument, nullptr, 'd'},
+      {"epsilon", required_argument, nullptr, 'e'},
+      {"gtft", required_argument, nullptr, 'g'},
+      {"help", no_argument, nullptr, 'h'},
+      {nullptr, 0, nullptr, 0}};
+
+  int opt;
+  while ((opt = getopt_long(argc, argv, "", long_opts, nullptr)) != -1) {
+    switch (opt) {
+    case 'a':
+      cfg.n_agents = std::atoi(optarg);
+      break;
+    case 'r':
+      cfg.rounds = std::atoi(optarg);
+      break;
+    case 's':
+      cfg.seed = std::strtoull(optarg, nullptr, 10);
+      break;
+    case 'p':
+      cfg.p_ngram = std::atof(optarg);
+      break;
+    case 'd':
+      cfg.depth = std::atoi(optarg);
+      break;
+    case 'e':
+      cfg.epsilon = std::atof(optarg);
+      break;
+    case 'g':
+      cfg.gtft_p = std::atof(optarg);
+      break;
+    case 'h':
       std::printf(
           "Usage: %s [--agents N] [--rounds R] [--seed S] [--p-ngram F]\n"
           "             [--depth D] [--epsilon E] [--gtft P]\n",
           argv[0]);
       std::exit(0);
+    default:
+      break;
     }
   }
   cfg.p_ngram = dclamp(cfg.p_ngram, 0.0f, 1.0f);
