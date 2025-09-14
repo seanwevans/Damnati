@@ -10,6 +10,16 @@
 #include <getopt.h>
 #include <vector>
 
+#define CUDA_CHECK(call)                                                     \
+  do {                                                                      \
+    cudaError_t err = call;                                                 \
+    if (err != cudaSuccess) {                                               \
+      std::fprintf(stderr, "CUDA error at %s:%d: %s\n", __FILE__, __LINE__,  \
+                   cudaGetErrorString(err));                                \
+      std::exit(EXIT_FAILURE);                                              \
+    }                                                                       \
+  } while (0)
+
 // Payoffs
 constexpr int Rw = 3; // (C,C)
 constexpr int Sw = 0; // (C,D)
@@ -346,8 +356,8 @@ void run_gpu(const Config &cfg) {
 
   AgentParams *d_params = nullptr;
   int *d_scores = nullptr;
-  cudaMallocManaged(&d_params, n * sizeof(AgentParams));
-  cudaMallocManaged(&d_scores, n * sizeof(int));
+  CUDA_CHECK(cudaMallocManaged(&d_params, n * sizeof(AgentParams)));
+  CUDA_CHECK(cudaMallocManaged(&d_scores, n * sizeof(int)));
   std::memcpy(d_params, hparams.data(), n * sizeof(AgentParams));
   std::memset(d_scores, 0, n * sizeof(int));
 
@@ -355,7 +365,8 @@ void run_gpu(const Config &cfg) {
   dim3 grid((n + block.x - 1) / block.x, (n + block.y - 1) / block.y);
 
   play_all_pairs<<<grid, block>>>(d_params, n, rounds, seed, d_scores);
-  cudaDeviceSynchronize();
+  CUDA_CHECK(cudaGetLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
 
   long long total = 0;
   int minv = 2147483647;
@@ -406,8 +417,8 @@ void run_gpu(const Config &cfg) {
                 d_scores[i]);
   }
 
-  cudaFree(d_params);
-  cudaFree(d_scores);
+  CUDA_CHECK(cudaFree(d_params));
+  CUDA_CHECK(cudaFree(d_scores));
 }
 
 int main(int argc, char **argv) {
