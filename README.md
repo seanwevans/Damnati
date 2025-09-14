@@ -38,7 +38,3 @@ Run the simulator and adjust parameters using command line flags:
 ## Output
 
 The simulator prints summary statistics in JSON format, including average score, minimum and maximum scores, standard deviation, and per-strategy results. The top few agents and their scores are also listed.
-
-## License
-
-This repository does not include a license file. Please ensure compliance with any applicable licenses before using this code.
