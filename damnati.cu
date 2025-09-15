@@ -314,6 +314,8 @@ void parse_cli(int argc, char **argv, Config &cfg) {
     }
   }
   cfg.p_ngram = dclamp(cfg.p_ngram, 0.0f, 1.0f);
+  cfg.epsilon = dclamp(cfg.epsilon, 0.0f, 1.0f);
+  cfg.gtft_p  = dclamp(cfg.gtft_p, 0.0f, 1.0f);
   cfg.depth = dmax(0, cfg.depth);
 }
 
