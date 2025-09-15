@@ -1,0 +1,19 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install CUDA
+        uses: Jimver/cuda-toolkit@v0.2.15
+        with:
+          cuda: '12.0.1'
+      - name: Run unit tests
+        run: |
+          nvcc -std=c++17 tests/test_core.cu -o tests/test_core
+          ./tests/test_core
