@@ -9,6 +9,7 @@
 #include <cstring>
 #include <getopt.h>
 #include <vector>
+#include <cuda_runtime.h>
 
 #define CUDA_CHECK(call)                                                       \
   do {                                                                         \
