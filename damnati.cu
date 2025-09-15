@@ -56,6 +56,25 @@ __device__ __host__ __forceinline__ T dclamp(T v, T lo, T hi) {
   return v < lo ? lo : (v > hi ? hi : v);
 }
 
+// Integer square root using the non-restoring method.
+// Returns floor(sqrt(x)) for 0 <= x < 2^63.
+__device__ __host__ __forceinline__ long long isqrt64(long long x) {
+  long long res = 0;
+  long long bit = 1LL << 62; // Start at the highest power-of-four <= x (4^31)
+  while (bit > x)
+    bit >>= 2;
+  while (bit != 0) {
+    if (x >= res + bit) {
+      x -= res + bit;
+      res = (res >> 1) + bit;
+    } else {
+      res >>= 1;
+    }
+    bit >>= 2;
+  }
+  return res;
+}
+
 struct AgentParams {
   int strat;        // Strategy enum
   float epsilon;    // N-gram ε
@@ -189,9 +208,13 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
   if (idx >= total)
     return;
 
-  double disc =
-      sqrt((double)(-8LL * idx + 4LL * n_agents * (n_agents - 1) - 7));
-  int i = (int)(n_agents - 2 - floor((disc - 1.0) * 0.5));
+  // Invert the triangular number T(i) = i*(2n - i - 1)/2 to recover
+  // the agent indices (i,j) from the linear pair index `idx` without
+  // resorting to floating-point math.  The discriminant inside the square
+  // root fits in 64 bits for practical `n_agents`.
+  long long disc = -8LL * idx + 4LL * n_agents * (n_agents - 1) - 7LL;
+  long long s = isqrt64(disc);
+  int i = (int)(n_agents - 2 - ((s - 1) >> 1));
   long long start = (long long)i * (2LL * n_agents - i - 1) / 2;
   int j = (int)(i + 1 + (idx - start));
 
