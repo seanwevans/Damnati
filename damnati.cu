@@ -276,39 +276,67 @@ void parse_cli(int argc, char **argv, Config &cfg) {
     switch (opt) {
     case 'a':
       cfg.n_agents = std::atoi(optarg);
+      if (cfg.n_agents <= 0) {
+        std::fprintf(stderr, "Error: --agents must be positive.\n");
+        std::exit(EXIT_FAILURE);
+      }
       break;
     case 'r':
       cfg.rounds = std::atoi(optarg);
+      if (cfg.rounds <= 0) {
+        std::fprintf(stderr, "Error: --rounds must be positive.\n");
+        std::exit(EXIT_FAILURE);
+      }
       break;
     case 's':
       cfg.seed = std::strtoull(optarg, nullptr, 10);
       break;
     case 'p':
       cfg.p_ngram = std::atof(optarg);
+      if (cfg.p_ngram < 0.0f || cfg.p_ngram > 1.0f) {
+        std::fprintf(stderr, "Error: --p-ngram must be in [0,1].\n");
+        std::exit(EXIT_FAILURE);
+      }
       break;
     case 'd':
       cfg.depth = std::atoi(optarg);
+      if (cfg.depth < 0) {
+        std::fprintf(stderr, "Error: --depth must be non-negative.\n");
+        std::exit(EXIT_FAILURE);
+      }
       break;
     case 'e':
       cfg.epsilon = std::atof(optarg);
+      if (cfg.epsilon < 0.0f || cfg.epsilon > 1.0f) {
+        std::fprintf(stderr, "Error: --epsilon must be in [0,1].\n");
+        std::exit(EXIT_FAILURE);
+      }
       break;
     case 'g':
       cfg.gtft_p = std::atof(optarg);
+      if (cfg.gtft_p < 0.0f || cfg.gtft_p > 1.0f) {
+        std::fprintf(stderr, "Error: --gtft must be in [0,1].\n");
+        std::exit(EXIT_FAILURE);
+      }
       break;
     case 'h':
-      std::printf(
-          "Usage: %s [--agents N] [--rounds R] [--seed S] [--p-ngram F]\n"
-          "             [--depth D] [--epsilon E] [--gtft P]\n",
-          argv[0]);
+      std::printf("Usage: %s [OPTIONS]\n\n", argv[0]);
+      std::printf("Options:\n");
+      std::printf("  --agents N    number of agents (>0)\n");
+      std::printf("  --rounds R    rounds per match (>0)\n");
+      std::printf("  --seed S      RNG seed\n");
+      std::printf("  --p-ngram F   fraction of N-gram learners [0,1]\n");
+      std::printf("  --depth D     N-gram depth (>=0)\n");
+      std::printf("  --epsilon E   exploration rate [0,1]\n");
+      std::printf("  --gtft P      GTFT forgiveness [0,1]\n");
+      std::printf("\nExample:\n  %s --agents 512 --rounds 200 --p-ngram 0.6 "
+                  "--depth 3 --epsilon 0.1 --gtft 0.2\n",
+                  argv[0]);
       std::exit(0);
     default:
       break;
     }
   }
-  cfg.p_ngram = dclamp(cfg.p_ngram, 0.0f, 1.0f);
-  cfg.epsilon = dclamp(cfg.epsilon, 0.0f, 1.0f);
-  cfg.gtft_p = dclamp(cfg.gtft_p, 0.0f, 1.0f);
-  cfg.depth = dmax(0, cfg.depth);
 }
 
 static const Strategy classics[12] = {AC,     AD,  TFT,  GTFT,   GRIM,   RANDOM,
