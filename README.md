@@ -38,3 +38,15 @@ Run the simulator and adjust parameters using command line flags:
 ## Output
 
 The simulator prints summary statistics in JSON format, including average score, minimum and maximum scores, standard deviation, and per-strategy results. The top few agents and their scores are also listed.
+
+## Testing
+
+Unit tests use the [Catch2](https://github.com/catchorg/Catch2) framework and can be
+compiled with `nvcc`. From the repository root run:
+
+```bash
+nvcc -std=c++17 tests/test_core.cu -o tests/test_core && ./tests/test_core
+```
+
+The tests cover strategy decision logic in `choose_action` and the payoff
+accumulation performed by `ngram_update`.
