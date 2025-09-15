@@ -136,10 +136,8 @@ __device__ __host__ __forceinline__ int encode_pair(int my, int opp) {
   return (my << 1) | opp;
 }
 
-__device__ __host__ __forceinline__ int ngram_choose(PlayerState &p,
-                                                     uint64_t seed, int i,
-                                                     int j, int r,
-                                                     int who) {
+__device__ __host__ __forceinline__ int
+ngram_choose(PlayerState &p, uint64_t seed, int i, int j, int r, int who) {
   if (p.depth <= 0) {
     return (p.q[0 * 2 + C] >= p.q[0 * 2 + D]) ? C : D;
   }

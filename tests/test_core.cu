@@ -50,9 +50,11 @@ TEST_CASE("choose_action outputs expected moves", "[choose]") {
   }
   SECTION("PAVLOV repeats if same, else switches") {
     p.strat = PAVLOV;
-    p.last = C; p.opp_last = C;
+    p.last = C;
+    p.opp_last = C;
     REQUIRE(choose_action(p, seed, 0, 0, 0, 0) == C);
-    p.last = C; p.opp_last = D;
+    p.last = C;
+    p.opp_last = D;
     REQUIRE(choose_action(p, seed, 0, 0, 0, 0) == D);
   }
   SECTION("ALT alternates starting with C") {
@@ -73,7 +75,8 @@ TEST_CASE("choose_action outputs expected moves", "[choose]") {
     p.strat = TESTER;
     p.defect_seen = 0;
     REQUIRE(choose_action(p, seed, 0, 0, 0, 0) == D);
-    p.defect_seen = 1; p.opp_last = C;
+    p.defect_seen = 1;
+    p.opp_last = C;
     REQUIRE(choose_action(p, seed, 0, 0, 0, 0) == C);
   }
   SECTION("REPEAT mirrors own last move") {
@@ -93,12 +96,13 @@ TEST_CASE("choose_action outputs expected moves", "[choose]") {
   SECTION("NGRAM chooses action with higher Q value") {
     p.strat = NGRAM;
     p.depth = 0;
-    int counts[2] = {0,0};
+    int counts[2] = {0, 0};
     float q[2] = {1.0f, 2.0f};
     p.counts = counts;
     p.q = q;
     REQUIRE(choose_action(p, seed, 0, 0, 0, 0) == D);
-    q[0] = 3.0f; q[1] = 2.0f;
+    q[0] = 3.0f;
+    q[1] = 2.0f;
     REQUIRE(choose_action(p, seed, 0, 0, 0, 0) == C);
   }
 }
