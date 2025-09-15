@@ -60,6 +60,8 @@ struct AgentParams {
   float epsilon;    // N-gram ε
   int depth;        // N-gram depth (determines memory size)
   float gtf_forget; // GTFT forgiveness prob
+  int *counts;      // Pointer into preallocated visit-count buffer
+  float *q;         // Pointer into preallocated Q-value buffer
 };
 
 __device__ __constant__ int d_payA[4] = {Rw, Sw, Tw, Pw};
@@ -88,45 +90,28 @@ struct PlayerState {
   int last = -1;
   int opp_last = -1;
   int defect_seen = 0;
-  int depth = 0; // current depth
+  int depth = 0;         // current depth
   float epsilon = 0.0f;
   unsigned int state = 0; // encoded history (2 bits/pair)
-  int *counts = nullptr;  // visit counts [n_states * 2]
-  float *q = nullptr;     // Q-values [n_states * 2]
-  int n_states = 0;       // number of states allocated
+  int *counts = nullptr;   // visit counts buffer
+  float *q = nullptr;      // Q-values buffer
   float gtft_forget = 0.1f;
 
-  __device__ __forceinline__ void init_ngram(int d, float eps) {
+  __device__ __forceinline__ void init_ngram(int d, float eps, int *cbuf,
+                                            float *qbuf) {
     depth = d;
     epsilon = eps;
     state = 0u;
-    int req = 1 << (2 * d);
-    if (req != n_states) {
-      if (counts)
-        free(counts);
-      if (q)
-        free(q);
-      counts = (int *)malloc(sizeof(int) * req * 2);
-      q = (float *)malloc(sizeof(float) * req * 2);
-      n_states = req;
-    }
+    counts = cbuf;
+    q = qbuf;
+    int n_states = 1 << (2 * d);
     for (int i = 0; i < n_states * 2; ++i) {
       counts[i] = 0;
       q[i] = 0.0f;
     }
   }
 
-  __device__ __forceinline__ void free_ngram() {
-    if (counts) {
-      free(counts);
-      counts = nullptr;
-    }
-    if (q) {
-      free(q);
-      q = nullptr;
-    }
-    n_states = 0;
-  }
+  __device__ __forceinline__ void free_ngram() {}
 };
 
 __device__ __forceinline__ int encode_pair(int my, int opp) {
@@ -216,9 +201,9 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
   B.gtft_forget = Bj.gtf_forget;
 
   if (A.strat == NGRAM)
-    A.init_ngram(Ai.depth, Ai.epsilon);
+    A.init_ngram(Ai.depth, Ai.epsilon, Ai.counts, Ai.q);
   if (B.strat == NGRAM)
-    B.init_ngram(Bj.depth, Bj.epsilon);
+    B.init_ngram(Bj.depth, Bj.epsilon, Bj.counts, Bj.q);
 
   int scoreA = 0, scoreB = 0;
 
@@ -381,6 +366,40 @@ void run_gpu(const Config &cfg) {
   std::vector<AgentParams> hparams(n);
   build_population(cfg, hparams);
 
+  // Preallocate buffers for all N-gram agents
+  size_t total_states = 0;
+  for (int i = 0; i < n; ++i) {
+    if (hparams[i].strat == NGRAM) {
+      int states = 1 << (2 * hparams[i].depth);
+      total_states += (size_t)states * 2;
+    }
+  }
+  std::vector<int> h_counts(total_states, 0);
+  std::vector<float> h_q(total_states, 0.0f);
+  int *d_counts = nullptr;
+  float *d_q = nullptr;
+  if (total_states > 0) {
+    CUDA_CHECK(cudaMalloc(&d_counts, total_states * sizeof(int)));
+    CUDA_CHECK(cudaMalloc(&d_q, total_states * sizeof(float)));
+    CUDA_CHECK(cudaMemcpy(d_counts, h_counts.data(),
+                         total_states * sizeof(int),
+                         cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_q, h_q.data(), total_states * sizeof(float),
+                         cudaMemcpyHostToDevice));
+  }
+  size_t offset = 0;
+  for (int i = 0; i < n; ++i) {
+    if (hparams[i].strat == NGRAM) {
+      int states = 1 << (2 * hparams[i].depth);
+      hparams[i].counts = d_counts + offset;
+      hparams[i].q = d_q + offset;
+      offset += (size_t)states * 2;
+    } else {
+      hparams[i].counts = nullptr;
+      hparams[i].q = nullptr;
+    }
+  }
+
   AgentParams *d_params = nullptr;
   int *d_scores = nullptr;
   CUDA_CHECK(cudaMallocManaged(&d_params, n * sizeof(AgentParams)));
@@ -446,6 +465,10 @@ void run_gpu(const Config &cfg) {
 
   CUDA_CHECK(cudaFree(d_params));
   CUDA_CHECK(cudaFree(d_scores));
+  if (d_counts)
+    CUDA_CHECK(cudaFree(d_counts));
+  if (d_q)
+    CUDA_CHECK(cudaFree(d_q));
 }
 
 int main(int argc, char **argv) {
