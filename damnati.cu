@@ -200,10 +200,16 @@ __device__ __forceinline__ int choose_action(PlayerState &p, uint64_t seed,
 __global__ void play_all_pairs(const AgentParams *__restrict__ params,
                                int n_agents, int rounds, uint64_t seed,
                                int *__restrict__ scores) {
-  int i = blockIdx.x * blockDim.x + threadIdx.x;
-  int j = blockIdx.y * blockDim.y + threadIdx.y;
-  if (i >= n_agents || j >= n_agents || i >= j)
+  long long idx = blockIdx.x * blockDim.x + threadIdx.x;
+  long long total = (long long)n_agents * (n_agents - 1) / 2;
+  if (idx >= total)
     return;
+
+  double disc =
+      sqrt((double)(-8LL * idx + 4LL * n_agents * (n_agents - 1) - 7));
+  int i = (int)(n_agents - 2 - floor((disc - 1.0) * 0.5));
+  long long start = (long long)i * (2LL * n_agents - i - 1) / 2;
+  int j = (int)(i + 1 + (idx - start));
 
   AgentParams Ai = params[i];
   AgentParams Bj = params[j];
@@ -388,10 +394,11 @@ void run_gpu(const Config &cfg) {
   std::memcpy(d_params, hparams.data(), n * sizeof(AgentParams));
   std::memset(d_scores, 0, n * sizeof(int));
 
-  dim3 block(16, 16);
-  dim3 grid((n + block.x - 1) / block.x, (n + block.y - 1) / block.y);
+  long long total_pairs = (long long)n * (n - 1) / 2;
+  int threads = 256;
+  int blocks = (int)((total_pairs + threads - 1) / threads);
 
-  play_all_pairs<<<grid, block>>>(d_params, n, rounds, seed, d_scores);
+  play_all_pairs<<<blocks, threads>>>(d_params, n, rounds, seed, d_scores);
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
 
