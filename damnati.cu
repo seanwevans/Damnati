@@ -68,15 +68,15 @@ struct AgentParams {
 __device__ __constant__ int d_payA[4] = {Rw, Sw, Tw, Pw};
 __device__ __constant__ int d_payB[4] = {Rw, Tw, Sw, Pw};
 
-__device__ __forceinline__ uint64_t mix64(uint64_t x) {
+__device__ __host__ __forceinline__ uint64_t mix64(uint64_t x) {
   x += 0x9E3779B97f4A7C15ULL;
   x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
   x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
   x = x ^ (x >> 31);
   return x;
 }
-__device__ __forceinline__ float rng01(uint64_t seed, int i, int j, int r,
-                                       int who) {
+__device__ __host__ __forceinline__ float rng01(uint64_t seed, int i, int j,
+                                                int r, int who) {
   uint64_t x = seed;
   x ^= (uint64_t)i * 0xD1342543DE82EF95ULL;
   x ^= (uint64_t)j * 0xA24BAED4963EE407ULL;
@@ -115,12 +115,14 @@ struct PlayerState {
   __device__ __forceinline__ void free_ngram() {}
 };
 
-__device__ __forceinline__ int encode_pair(int my, int opp) {
+__device__ __host__ __forceinline__ int encode_pair(int my, int opp) {
   return (my << 1) | opp;
 }
 
-__device__ __forceinline__ int ngram_choose(PlayerState &p, uint64_t seed,
-                                            int i, int j, int r, int who) {
+__device__ __host__ __forceinline__ int ngram_choose(PlayerState &p,
+                                                     uint64_t seed, int i,
+                                                     int j, int r,
+                                                     int who) {
   if (p.depth <= 0) {
     return (p.q[0 * 2 + C] >= p.q[0 * 2 + D]) ? C : D;
   }
@@ -129,8 +131,8 @@ __device__ __forceinline__ int ngram_choose(PlayerState &p, uint64_t seed,
   return (p.q[p.state * 2 + C] >= p.q[p.state * 2 + D]) ? C : D;
 }
 
-__device__ __forceinline__ void ngram_update(PlayerState &p, int my, int opp,
-                                             int reward) {
+__device__ __host__ __forceinline__ void ngram_update(PlayerState &p, int my,
+                                                      int opp, int reward) {
   const int mask = (p.depth == 0) ? 0 : ((1 << (2 * p.depth)) - 1);
   const int s = (p.depth == 0) ? 0 : p.state;
   int a = my;
@@ -143,8 +145,8 @@ __device__ __forceinline__ void ngram_update(PlayerState &p, int my, int opp,
   }
 }
 
-__device__ __forceinline__ int choose_action(PlayerState &p, uint64_t seed,
-                                             int i, int j, int r, int who) {
+__device__ __host__ __forceinline__ int
+choose_action(PlayerState &p, uint64_t seed, int i, int j, int r, int who) {
   switch ((Strategy)p.strat) {
   case AC:
     return C;
@@ -480,9 +482,11 @@ void run_gpu(const Config &cfg) {
     CUDA_CHECK(cudaFree(d_q));
 }
 
+#ifndef DAMNATI_NO_MAIN
 int main(int argc, char **argv) {
   Config cfg;
   parse_cli(argc, argv, cfg);
   run_gpu(cfg);
   return 0;
 }
+#endif
