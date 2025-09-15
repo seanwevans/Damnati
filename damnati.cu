@@ -214,8 +214,7 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
   // the agent indices (i,j) from the linear pair index `idx` without
   // resorting to floating-point math.  The discriminant inside the square
   // root fits in 64 bits for practical `n_agents`.
-  long long disc =
-      -8LL * idx + 4LL * n_agents * (n_agents - 1) - 7LL;
+  long long disc = -8LL * idx + 4LL * n_agents * (n_agents - 1) - 7LL;
   long long s = isqrt64(disc);
   int i = (int)(n_agents - 2 - ((s - 1) >> 1));
   long long start = (long long)i * (2LL * n_agents - i - 1) / 2;
