@@ -90,15 +90,15 @@ struct PlayerState {
   int last = -1;
   int opp_last = -1;
   int defect_seen = 0;
-  int depth = 0;         // current depth
+  int depth = 0; // current depth
   float epsilon = 0.0f;
   unsigned int state = 0; // encoded history (2 bits/pair)
-  int *counts = nullptr;   // visit counts buffer
-  float *q = nullptr;      // Q-values buffer
+  int *counts = nullptr;  // visit counts buffer
+  float *q = nullptr;     // Q-values buffer
   float gtft_forget = 0.1f;
 
   __device__ __forceinline__ void init_ngram(int d, float eps, int *cbuf,
-                                            float *qbuf) {
+                                             float *qbuf) {
     depth = d;
     epsilon = eps;
     state = 0u;
@@ -381,11 +381,10 @@ void run_gpu(const Config &cfg) {
   if (total_states > 0) {
     CUDA_CHECK(cudaMalloc(&d_counts, total_states * sizeof(int)));
     CUDA_CHECK(cudaMalloc(&d_q, total_states * sizeof(float)));
-    CUDA_CHECK(cudaMemcpy(d_counts, h_counts.data(),
-                         total_states * sizeof(int),
-                         cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_counts, h_counts.data(), total_states * sizeof(int),
+                          cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(d_q, h_q.data(), total_states * sizeof(float),
-                         cudaMemcpyHostToDevice));
+                          cudaMemcpyHostToDevice));
   }
   size_t offset = 0;
   for (int i = 0; i < n; ++i) {
