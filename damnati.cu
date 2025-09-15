@@ -111,8 +111,6 @@ struct PlayerState {
       q[i] = 0.0f;
     }
   }
-
-  __device__ __forceinline__ void free_ngram() {}
 };
 
 __device__ __forceinline__ int encode_pair(int my, int opp) {
@@ -242,11 +240,6 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
 
   atomicAdd(&scores[i], scoreA);
   atomicAdd(&scores[j], scoreB);
-
-  if (A.strat == NGRAM)
-    A.free_ngram();
-  if (B.strat == NGRAM)
-    B.free_ngram();
 }
 
 struct Config {
