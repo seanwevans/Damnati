@@ -461,8 +461,9 @@ void run_gpu(const Config &cfg) {
 
   long long total_pairs = (long long)n * (n - 1) / 2;
   if (total_pairs == 0) {
-    std::fprintf(stderr,
-                 "Warning: not enough agents to form pairs; skipping kernel launch.\n");
+    std::fprintf(
+        stderr,
+        "Warning: not enough agents to form pairs; skipping kernel launch.\n");
   } else {
     int threads = 256;
     int blocks = (int)((total_pairs + threads - 1) / threads);
