@@ -17,7 +17,25 @@ TEST_CASE("parse_cli rejects invalid depth and unknown options", "[cli]") {
       parse_cli(argc, argv, cfg);
       FAIL("parse_cli should have thrown for negative depth");
     } catch (const std::runtime_error &ex) {
-      REQUIRE(std::string(ex.what()) == "Error: --depth must be non-negative.");
+      const std::string expected =
+          std::string("Error: --depth must be in [0,") +
+          std::to_string(MAX_NGRAM_DEPTH) + "].";
+      REQUIRE(std::string(ex.what()) == expected);
+    }
+  }
+
+  {
+    char prog[] = "damnati";
+    char agents[] = "--agents";
+    char one[] = "1";
+    char *argv[] = {prog, agents, one, nullptr};
+    int argc = 3;
+    try {
+      parse_cli(argc, argv, cfg);
+      FAIL("parse_cli should have thrown for too few agents");
+    } catch (const std::runtime_error &ex) {
+      REQUIRE(std::string(ex.what()) ==
+              "Error: --agents must be at least 2.");
     }
   }
 
