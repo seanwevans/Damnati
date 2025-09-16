@@ -292,8 +292,8 @@ void parse_cli(int argc, char **argv, Config &cfg) {
     switch (opt) {
     case 'a':
       cfg.n_agents = std::atoi(optarg);
-      if (cfg.n_agents <= 0) {
-        std::fprintf(stderr, "Error: --agents must be positive.\n");
+      if (cfg.n_agents < 2) {
+        std::fprintf(stderr, "Error: --agents must be at least 2.\n");
         std::exit(EXIT_FAILURE);
       }
       break;
@@ -338,7 +338,7 @@ void parse_cli(int argc, char **argv, Config &cfg) {
     case 'h':
       std::printf("Usage: %s [OPTIONS]\n\n", argv[0]);
       std::printf("Options:\n");
-      std::printf("  --agents N    number of agents (>0)\n");
+      std::printf("  --agents N    number of agents (>=2)\n");
       std::printf("  --rounds R    rounds per match (>0)\n");
       std::printf("  --seed S      RNG seed\n");
       std::printf("  --p-ngram F   fraction of N-gram learners [0,1]\n");
@@ -460,12 +460,17 @@ void run_gpu(const Config &cfg) {
   std::memset(d_scores, 0, n * sizeof(int));
 
   long long total_pairs = (long long)n * (n - 1) / 2;
-  int threads = 256;
-  int blocks = (int)((total_pairs + threads - 1) / threads);
+  if (total_pairs == 0) {
+    std::fprintf(stderr,
+                 "Warning: not enough agents to form pairs; skipping kernel launch.\n");
+  } else {
+    int threads = 256;
+    int blocks = (int)((total_pairs + threads - 1) / threads);
 
-  play_all_pairs<<<blocks, threads>>>(d_params, n, rounds, seed, d_scores);
-  CUDA_CHECK(cudaGetLastError());
-  CUDA_CHECK(cudaDeviceSynchronize());
+    play_all_pairs<<<blocks, threads>>>(d_params, n, rounds, seed, d_scores);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
+  }
 
   long long total = 0;
   int minv = 2147483647;
