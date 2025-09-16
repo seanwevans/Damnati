@@ -79,7 +79,7 @@ struct AgentParams {
   int strat;        // Strategy enum
   float epsilon;    // N-gram ε
   int depth;        // N-gram depth (determines memory size)
-  float gtf_forget; // GTFT forgiveness prob
+  float gtft_forget; // GTFT forgiveness prob
   int *counts;      // Pointer into preallocated visit-count buffer
   float *q;         // Pointer into preallocated Q-value buffer
 };
@@ -223,10 +223,10 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
 
   PlayerState A;
   A.strat = Ai.strat;
-  A.gtft_forget = Ai.gtf_forget;
+  A.gtft_forget = Ai.gtft_forget;
   PlayerState B;
   B.strat = Bj.strat;
-  B.gtft_forget = Bj.gtf_forget;
+  B.gtft_forget = Bj.gtft_forget;
 
   if (A.strat == NGRAM)
     A.init_ngram(Ai.depth, Ai.epsilon, Ai.counts, Ai.q);
@@ -391,13 +391,13 @@ void build_population(const Config &cfg, std::vector<AgentParams> &hparams) {
       p.strat = NGRAM;
       p.depth = cfg.depth;
       p.epsilon = cfg.epsilon;
-      p.gtf_forget = cfg.gtft_p;
+      p.gtft_forget = cfg.gtft_p;
     } else {
       Strategy s = classics[(i - n_ng) % 12];
       p.strat = s;
       p.depth = 0;
       p.epsilon = 0.0f;
-      p.gtf_forget = cfg.gtft_p;
+      p.gtft_forget = cfg.gtft_p;
     }
     hparams[i] = p;
   }
