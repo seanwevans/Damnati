@@ -438,6 +438,11 @@ void parse_cli(int argc, char **argv, Config &cfg) {
       std::exit(EXIT_FAILURE);
     }
   }
+
+  if (optind < argc) {
+    throw std::runtime_error("Error: unexpected positional argument '" +
+                             std::string(argv[optind]) + "'.");
+  }
 }
 
 static const Strategy classics[12] = {AC,     AD,  TFT,  GTFT,   GRIM,   RANDOM,
