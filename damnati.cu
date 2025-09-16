@@ -3,6 +3,7 @@
 // Run:   ./damnati --agents 512 --rounds 200 --seed 42 --p-ngram 0.6
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -495,8 +496,9 @@ void run_gpu(const Config &cfg) {
   std::printf(" \"avg_score\":%.3f,\"min\":%d,\"max\":%d,\"stdev\":%.3f,\n",
               mean, minv, maxv, stdev);
 
-  double sum_by[14] = {0.0};
-  int cnt_by[14] = {0};
+  constexpr std::size_t strategy_count = static_cast<std::size_t>(NGRAM) + 1;
+  std::array<double, strategy_count> sum_by{};
+  std::array<int, strategy_count> cnt_by{};
   for (int i = 0; i < n; ++i) {
     sum_by[hparams[i].strat] += d_scores[i];
     cnt_by[hparams[i].strat]++;
@@ -506,8 +508,11 @@ void run_gpu(const Config &cfg) {
   const char *names[] = {"AC",     "AD",     "TFT",  "GTFT", "GRIM",
                          "RANDOM", "PAVLOV", "ALT",  "JOSS", "TESTER",
                          "REPEAT", "S_TFT",  "NGRAM"};
+  constexpr std::size_t names_count = sizeof(names) / sizeof(names[0]);
+  static_assert(strategy_count == names_count,
+                "Strategy names array must match strategy count");
   bool first = true;
-  for (int s = 0; s <= NGRAM; ++s) {
+  for (std::size_t s = 0; s < strategy_count; ++s) {
     if (cnt_by[s] == 0)
       continue;
     if (!first) {
