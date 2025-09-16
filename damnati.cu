@@ -9,6 +9,8 @@
 #include <cstring>
 #include <cuda_runtime.h>
 #include <getopt.h>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 #define CUDA_CHECK(call)                                                       \
@@ -287,21 +289,21 @@ void parse_cli(int argc, char **argv, Config &cfg) {
       {"help", no_argument, nullptr, 'h'},
       {nullptr, 0, nullptr, 0}};
 
+  opterr = 0;
+  optind = 1;
   int opt;
   while ((opt = getopt_long(argc, argv, "", long_opts, nullptr)) != -1) {
     switch (opt) {
     case 'a':
       cfg.n_agents = std::atoi(optarg);
       if (cfg.n_agents <= 0) {
-        std::fprintf(stderr, "Error: --agents must be positive.\n");
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: --agents must be positive.");
       }
       break;
     case 'r':
       cfg.rounds = std::atoi(optarg);
       if (cfg.rounds <= 0) {
-        std::fprintf(stderr, "Error: --rounds must be positive.\n");
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: --rounds must be positive.");
       }
       break;
     case 's':
@@ -310,29 +312,25 @@ void parse_cli(int argc, char **argv, Config &cfg) {
     case 'p':
       cfg.p_ngram = std::atof(optarg);
       if (cfg.p_ngram < 0.0f || cfg.p_ngram > 1.0f) {
-        std::fprintf(stderr, "Error: --p-ngram must be in [0,1].\n");
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: --p-ngram must be in [0,1].");
       }
       break;
     case 'd':
       cfg.depth = std::atoi(optarg);
       if (cfg.depth < 0) {
-        std::fprintf(stderr, "Error: --depth must be non-negative.\n");
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: --depth must be non-negative.");
       }
       break;
     case 'e':
       cfg.epsilon = std::atof(optarg);
       if (cfg.epsilon < 0.0f || cfg.epsilon > 1.0f) {
-        std::fprintf(stderr, "Error: --epsilon must be in [0,1].\n");
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: --epsilon must be in [0,1].");
       }
       break;
     case 'g':
       cfg.gtft_p = std::atof(optarg);
       if (cfg.gtft_p < 0.0f || cfg.gtft_p > 1.0f) {
-        std::fprintf(stderr, "Error: --gtft must be in [0,1].\n");
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: --gtft must be in [0,1].");
       }
       break;
     case 'h':
@@ -349,8 +347,16 @@ void parse_cli(int argc, char **argv, Config &cfg) {
                   "--depth 3 --epsilon 0.1 --gtft 0.2\n",
                   argv[0]);
       std::exit(0);
+    case '?': {
+      std::string flag = (optind > 0 && optind - 1 < argc)
+                             ? std::string(argv[optind - 1])
+                             : std::string();
+      if (!flag.empty())
+        throw std::runtime_error("Error: unrecognized option '" + flag + "'.");
+      throw std::runtime_error("Error: unrecognized option.");
+    }
     default:
-      break;
+      throw std::runtime_error("Error: unrecognized option.");
     }
   }
 }
@@ -527,7 +533,12 @@ void run_gpu(const Config &cfg) {
 #ifndef DAMNATI_NO_MAIN
 int main(int argc, char **argv) {
   Config cfg;
-  parse_cli(argc, argv, cfg);
+  try {
+    parse_cli(argc, argv, cfg);
+  } catch (const std::exception &ex) {
+    std::fprintf(stderr, "%s\n", ex.what());
+    return EXIT_FAILURE;
+  }
   run_gpu(cfg);
   return 0;
 }
