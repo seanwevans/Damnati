@@ -51,4 +51,18 @@ TEST_CASE("parse_cli rejects invalid depth and unknown options", "[cli]") {
               std::string::npos);
     }
   }
+
+  {
+    char prog[] = "damnati";
+    char token[] = "extra";
+    char *argv[] = {prog, token, nullptr};
+    int argc = 2;
+    try {
+      parse_cli(argc, argv, cfg);
+      FAIL("parse_cli should have thrown for unexpected positional argument");
+    } catch (const std::runtime_error &ex) {
+      REQUIRE(std::string(ex.what()) ==
+              "Error: unexpected positional argument 'extra'.");
+    }
+  }
 }
