@@ -501,12 +501,16 @@ void run_gpu(const Config &cfg) {
   const char *names[] = {"AC",     "AD",     "TFT",  "GTFT", "GRIM",
                          "RANDOM", "PAVLOV", "ALT",  "JOSS", "TESTER",
                          "REPEAT", "S_TFT",  "NGRAM"};
+  bool first = true;
   for (int s = 0; s <= NGRAM; ++s) {
     if (cnt_by[s] == 0)
       continue;
-    std::printf("\"%s\":{\"mean\":%.3f,\"count\":%d}%s", names[s],
-                sum_by[s] / (double)dmax(1, cnt_by[s]), cnt_by[s],
-                (s == NGRAM ? "" : ","));
+    if (!first) {
+      std::printf(",");
+    }
+    std::printf("\"%s\":{\"mean\":%.3f,\"count\":%d}", names[s],
+                sum_by[s] / (double)dmax(1, cnt_by[s]), cnt_by[s]);
+    first = false;
   }
   std::printf("}}\n");
 
