@@ -155,3 +155,89 @@ TEST_CASE("isqrt64 computes floor square roots", "[isqrt64]") {
     REQUIRE(isqrt64(c.input) == c.expected);
   }
 }
+
+TEST_CASE("GPU tournament with multiple N-gram agents is deterministic",
+          "[gpu]") {
+  const int n_agents = 6;
+  const int rounds = 20;
+  const uint64_t seed = 424242ULL;
+
+  auto make_ngram = [](int depth, float epsilon) {
+    AgentParams p{};
+    p.strat = NGRAM;
+    p.depth = depth;
+    p.epsilon = epsilon;
+    p.gtft_forget = 0.0f;
+    return p;
+  };
+
+  auto make_classic = [](Strategy s) {
+    AgentParams p{};
+    p.strat = s;
+    p.depth = 0;
+    p.epsilon = 0.0f;
+    p.gtft_forget = 0.0f;
+    return p;
+  };
+
+  std::vector<AgentParams> agents(n_agents);
+  agents[0] = make_ngram(1, 0.0f);
+  agents[1] = make_ngram(2, 0.05f);
+  agents[2] = make_ngram(0, 0.0f);
+  agents[3] = make_classic(TFT);
+  agents[4] = make_classic(GRIM);
+  agents[5] = make_classic(ALT);
+
+  const long long total_pairs = static_cast<long long>(n_agents) *
+                                static_cast<long long>(n_agents - 1) / 2;
+  REQUIRE(total_pairs > 0);
+
+  std::vector<std::size_t> match_offsets;
+  std::size_t total_span = compute_match_offsets(agents, match_offsets);
+  REQUIRE(match_offsets.size() == static_cast<std::size_t>(total_pairs) * 2);
+  REQUIRE(total_span > 0);
+
+  int *d_match_counts = nullptr;
+  float *d_match_q = nullptr;
+  CUDA_CHECK(cudaMalloc(&d_match_counts, total_span * sizeof(int)));
+  CUDA_CHECK(cudaMalloc(&d_match_q, total_span * sizeof(float)));
+
+  std::size_t *d_match_offsets = nullptr;
+  CUDA_CHECK(cudaMallocManaged(&d_match_offsets,
+                               match_offsets.size() * sizeof(std::size_t)));
+  std::memcpy(d_match_offsets, match_offsets.data(),
+              match_offsets.size() * sizeof(std::size_t));
+
+  AgentParams *d_params = nullptr;
+  int *d_scores = nullptr;
+  CUDA_CHECK(cudaMallocManaged(&d_params, n_agents * sizeof(AgentParams)));
+  CUDA_CHECK(cudaMallocManaged(&d_scores, n_agents * sizeof(int)));
+  std::memcpy(d_params, agents.data(), n_agents * sizeof(AgentParams));
+
+  auto run_once = [&](std::vector<int> &out_scores) {
+    CUDA_CHECK(cudaMemset(d_scores, 0, n_agents * sizeof(int)));
+    CUDA_CHECK(cudaMemset(d_match_counts, 0, total_span * sizeof(int)));
+    CUDA_CHECK(cudaMemset(d_match_q, 0, total_span * sizeof(float)));
+    int threads = 64;
+    int blocks = static_cast<int>((total_pairs + threads - 1) / threads);
+    play_all_pairs<<<blocks, threads>>>(d_params, n_agents, rounds, seed,
+                                        d_match_offsets, d_match_counts,
+                                        d_match_q, d_scores);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
+    out_scores.assign(d_scores, d_scores + n_agents);
+  };
+
+  std::vector<int> first_run;
+  std::vector<int> second_run;
+  run_once(first_run);
+  run_once(second_run);
+
+  REQUIRE(first_run == second_run);
+
+  CUDA_CHECK(cudaFree(d_match_counts));
+  CUDA_CHECK(cudaFree(d_match_q));
+  CUDA_CHECK(cudaFree(d_match_offsets));
+  CUDA_CHECK(cudaFree(d_params));
+  CUDA_CHECK(cudaFree(d_scores));
+}
