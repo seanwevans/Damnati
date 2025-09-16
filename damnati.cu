@@ -427,17 +427,15 @@ void run_gpu(const Config &cfg) {
       total_states += (size_t)states * 2;
     }
   }
-  std::vector<int> h_counts(total_states, 0);
-  std::vector<float> h_q(total_states, 0.0f);
   int *d_counts = nullptr;
   float *d_q = nullptr;
   if (total_states > 0) {
-    CUDA_CHECK(cudaMalloc(&d_counts, total_states * sizeof(int)));
-    CUDA_CHECK(cudaMalloc(&d_q, total_states * sizeof(float)));
-    CUDA_CHECK(cudaMemcpy(d_counts, h_counts.data(), total_states * sizeof(int),
-                          cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_q, h_q.data(), total_states * sizeof(float),
-                          cudaMemcpyHostToDevice));
+    size_t counts_bytes = total_states * sizeof(int);
+    size_t q_bytes = total_states * sizeof(float);
+    CUDA_CHECK(cudaMalloc(&d_counts, counts_bytes));
+    CUDA_CHECK(cudaMalloc(&d_q, q_bytes));
+    CUDA_CHECK(cudaMemset(d_counts, 0, counts_bytes));
+    CUDA_CHECK(cudaMemset(d_q, 0, q_bytes));
   }
   size_t offset = 0;
   for (int i = 0; i < n; ++i) {
