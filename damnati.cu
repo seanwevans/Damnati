@@ -11,6 +11,8 @@
 #include <cuda_runtime.h>
 #include <getopt.h>
 #include <random>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 #define CUDA_CHECK(call)                                                       \
@@ -78,12 +80,12 @@ __device__ __host__ __forceinline__ long long isqrt64(long long x) {
 }
 
 struct AgentParams {
-  int strat;        // Strategy enum
-  float epsilon;    // N-gram ε
-  int depth;        // N-gram depth (determines memory size)
-  float gtf_forget; // GTFT forgiveness prob
-  int *counts;      // Pointer into preallocated visit-count buffer
-  float *q;         // Pointer into preallocated Q-value buffer
+  int strat;         // Strategy enum
+  float epsilon;     // N-gram ε
+  int depth;         // N-gram depth (determines memory size)
+  float gtft_forget; // GTFT forgiveness prob
+  int *counts;       // Pointer into preallocated visit-count buffer
+  float *q;          // Pointer into preallocated Q-value buffer
 };
 
 __device__ __constant__ int d_payA[4] = {Rw, Sw, Tw, Pw};
@@ -225,10 +227,10 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
 
   PlayerState A;
   A.strat = Ai.strat;
-  A.gtft_forget = Ai.gtf_forget;
+  A.gtft_forget = Ai.gtft_forget;
   PlayerState B;
   B.strat = Bj.strat;
-  B.gtft_forget = Bj.gtf_forget;
+  B.gtft_forget = Bj.gtft_forget;
 
   if (A.strat == NGRAM)
     A.init_ngram(Ai.depth, Ai.epsilon, Ai.counts, Ai.q);
@@ -277,6 +279,22 @@ struct Config {
   float gtft_p = 0.1f;  // GTFT forgiveness
 };
 
+static void print_usage(FILE *stream, const char *prog) {
+  std::fprintf(stream, "Usage: %s [OPTIONS]\n\n", prog);
+  std::fprintf(stream, "Options:\n");
+  std::fprintf(stream, "  --agents N    number of agents (>0)\n");
+  std::fprintf(stream, "  --rounds R    rounds per match (>0)\n");
+  std::fprintf(stream, "  --seed S      RNG seed\n");
+  std::fprintf(stream, "  --p-ngram F   fraction of N-gram learners [0,1]\n");
+  std::fprintf(stream, "  --depth D     N-gram depth (>=0)\n");
+  std::fprintf(stream, "  --epsilon E   exploration rate [0,1]\n");
+  std::fprintf(stream, "  --gtft P      GTFT forgiveness [0,1]\n");
+  std::fprintf(stream,
+               "\nExample:\n  %s --agents 512 --rounds 200 --p-ngram 0.6 "
+               "--depth 3 --epsilon 0.1 --gtft 0.2\n",
+               prog);
+}
+
 void parse_cli(int argc, char **argv, Config &cfg) {
   static const struct option long_opts[] = {
       {"agents", required_argument, nullptr, 'a'},
@@ -289,21 +307,22 @@ void parse_cli(int argc, char **argv, Config &cfg) {
       {"help", no_argument, nullptr, 'h'},
       {nullptr, 0, nullptr, 0}};
 
+  opterr = 0;
+  optind = 1;
   int opt;
   while ((opt = getopt_long(argc, argv, "", long_opts, nullptr)) != -1) {
     switch (opt) {
     case 'a':
       cfg.n_agents = std::atoi(optarg);
-      if (cfg.n_agents <= 0) {
-        std::fprintf(stderr, "Error: --agents must be positive.\n");
+      if (cfg.n_agents < 2) {
+        std::fprintf(stderr, "Error: --agents must be at least 2.\n");
         std::exit(EXIT_FAILURE);
       }
       break;
     case 'r':
       cfg.rounds = std::atoi(optarg);
       if (cfg.rounds <= 0) {
-        std::fprintf(stderr, "Error: --rounds must be positive.\n");
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: --rounds must be positive.");
       }
       break;
     case 's':
@@ -312,47 +331,46 @@ void parse_cli(int argc, char **argv, Config &cfg) {
     case 'p':
       cfg.p_ngram = std::atof(optarg);
       if (cfg.p_ngram < 0.0f || cfg.p_ngram > 1.0f) {
-        std::fprintf(stderr, "Error: --p-ngram must be in [0,1].\n");
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: --p-ngram must be in [0,1].");
       }
       break;
     case 'd':
       cfg.depth = std::atoi(optarg);
       if (cfg.depth < 0) {
-        std::fprintf(stderr, "Error: --depth must be non-negative.\n");
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: --depth must be non-negative.");
       }
       break;
     case 'e':
       cfg.epsilon = std::atof(optarg);
       if (cfg.epsilon < 0.0f || cfg.epsilon > 1.0f) {
-        std::fprintf(stderr, "Error: --epsilon must be in [0,1].\n");
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: --epsilon must be in [0,1].");
       }
       break;
     case 'g':
       cfg.gtft_p = std::atof(optarg);
       if (cfg.gtft_p < 0.0f || cfg.gtft_p > 1.0f) {
-        std::fprintf(stderr, "Error: --gtft must be in [0,1].\n");
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: --gtft must be in [0,1].");
       }
       break;
     case 'h':
-      std::printf("Usage: %s [OPTIONS]\n\n", argv[0]);
-      std::printf("Options:\n");
-      std::printf("  --agents N    number of agents (>0)\n");
-      std::printf("  --rounds R    rounds per match (>0)\n");
-      std::printf("  --seed S      RNG seed\n");
-      std::printf("  --p-ngram F   fraction of N-gram learners [0,1]\n");
-      std::printf("  --depth D     N-gram depth (>=0)\n");
-      std::printf("  --epsilon E   exploration rate [0,1]\n");
-      std::printf("  --gtft P      GTFT forgiveness [0,1]\n");
-      std::printf("\nExample:\n  %s --agents 512 --rounds 200 --p-ngram 0.6 "
-                  "--depth 3 --epsilon 0.1 --gtft 0.2\n",
-                  argv[0]);
+      print_usage(stdout, argv[0]);
       std::exit(0);
+    case '?': {
+      std::string flag = (optind > 0 && optind - 1 < argc)
+                             ? std::string(argv[optind - 1])
+                             : std::string();
+      if (!flag.empty())
+        throw std::runtime_error("Error: unrecognized option '" + flag + "'.");
+      throw std::runtime_error("Error: unrecognized option.");
+    }
     default:
-      break;
+      if (optind > 0 && optind <= argc) {
+        std::fprintf(stderr, "Error: unknown option '%s'.\n", argv[optind - 1]);
+      } else {
+        std::fprintf(stderr, "Error: unknown option encountered.\n");
+      }
+      print_usage(stderr, argv[0]);
+      std::exit(EXIT_FAILURE);
     }
   }
 }
@@ -369,13 +387,13 @@ void build_population(const Config &cfg, std::vector<AgentParams> &hparams) {
       p.strat = NGRAM;
       p.depth = cfg.depth;
       p.epsilon = cfg.epsilon;
-      p.gtf_forget = cfg.gtft_p;
+      p.gtft_forget = cfg.gtft_p;
     } else {
       Strategy s = classics[(i - n_ng) % 12];
       p.strat = s;
       p.depth = 0;
       p.epsilon = 0.0f;
-      p.gtf_forget = cfg.gtft_p;
+      p.gtft_forget = cfg.gtft_p;
     }
     hparams[i] = p;
   }
@@ -406,17 +424,15 @@ void run_gpu(const Config &cfg) {
       total_states += (size_t)states * 2;
     }
   }
-  std::vector<int> h_counts(total_states, 0);
-  std::vector<float> h_q(total_states, 0.0f);
   int *d_counts = nullptr;
   float *d_q = nullptr;
   if (total_states > 0) {
-    CUDA_CHECK(cudaMalloc(&d_counts, total_states * sizeof(int)));
-    CUDA_CHECK(cudaMalloc(&d_q, total_states * sizeof(float)));
-    CUDA_CHECK(cudaMemcpy(d_counts, h_counts.data(), total_states * sizeof(int),
-                          cudaMemcpyHostToDevice));
-    CUDA_CHECK(cudaMemcpy(d_q, h_q.data(), total_states * sizeof(float),
-                          cudaMemcpyHostToDevice));
+    size_t counts_bytes = total_states * sizeof(int);
+    size_t q_bytes = total_states * sizeof(float);
+    CUDA_CHECK(cudaMalloc(&d_counts, counts_bytes));
+    CUDA_CHECK(cudaMalloc(&d_q, q_bytes));
+    CUDA_CHECK(cudaMemset(d_counts, 0, counts_bytes));
+    CUDA_CHECK(cudaMemset(d_q, 0, q_bytes));
   }
   size_t offset = 0;
   for (int i = 0; i < n; ++i) {
@@ -439,12 +455,18 @@ void run_gpu(const Config &cfg) {
   std::memset(d_scores, 0, n * sizeof(int));
 
   long long total_pairs = (long long)n * (n - 1) / 2;
-  int threads = 256;
-  int blocks = (int)((total_pairs + threads - 1) / threads);
+  if (total_pairs == 0) {
+    std::fprintf(
+        stderr,
+        "Warning: not enough agents to form pairs; skipping kernel launch.\n");
+  } else {
+    int threads = 256;
+    int blocks = (int)((total_pairs + threads - 1) / threads);
 
-  play_all_pairs<<<blocks, threads>>>(d_params, n, rounds, seed, d_scores);
-  CUDA_CHECK(cudaGetLastError());
-  CUDA_CHECK(cudaDeviceSynchronize());
+    play_all_pairs<<<blocks, threads>>>(d_params, n, rounds, seed, d_scores);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
+  }
 
   long long total = 0;
   int minv = 2147483647;
@@ -480,12 +502,16 @@ void run_gpu(const Config &cfg) {
   const char *names[] = {"AC",     "AD",     "TFT",  "GTFT", "GRIM",
                          "RANDOM", "PAVLOV", "ALT",  "JOSS", "TESTER",
                          "REPEAT", "S_TFT",  "NGRAM"};
+  bool first = true;
   for (int s = 0; s <= NGRAM; ++s) {
     if (cnt_by[s] == 0)
       continue;
-    std::printf("\"%s\":{\"mean\":%.3f,\"count\":%d}%s", names[s],
-                sum_by[s] / (double)dmax(1, cnt_by[s]), cnt_by[s],
-                (s == NGRAM ? "" : ","));
+    if (!first) {
+      std::printf(",");
+    }
+    std::printf("\"%s\":{\"mean\":%.3f,\"count\":%d}", names[s],
+                sum_by[s] / (double)dmax(1, cnt_by[s]), cnt_by[s]);
+    first = false;
   }
   std::printf("}}\n");
 
@@ -506,7 +532,12 @@ void run_gpu(const Config &cfg) {
 #ifndef DAMNATI_NO_MAIN
 int main(int argc, char **argv) {
   Config cfg;
-  parse_cli(argc, argv, cfg);
+  try {
+    parse_cli(argc, argv, cfg);
+  } catch (const std::exception &ex) {
+    std::fprintf(stderr, "%s\n", ex.what());
+    return EXIT_FAILURE;
+  }
   run_gpu(cfg);
   return 0;
 }
