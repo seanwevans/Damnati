@@ -3,9 +3,9 @@
 // Run:   ./damnati --agents 512 --rounds 200 --seed 42 --p-ngram 0.6
 
 #include <algorithm>
-#include <cerrno>
 #include <array>
 #include <cassert>
+#include <cerrno>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -311,7 +311,8 @@ int parse_int_option(const char *opt_name, const char *value) {
   const std::string arg = value;
   const std::string flag = format_flag(opt_name);
   if (end == value || *end != '\0') {
-    throw std::runtime_error("Error: invalid value for " + flag + ": '" + arg + "'.");
+    throw std::runtime_error("Error: invalid value for " + flag + ": '" + arg +
+                             "'.");
   }
   if (errno == ERANGE || parsed < std::numeric_limits<int>::min() ||
       parsed > std::numeric_limits<int>::max()) {
@@ -328,7 +329,8 @@ uint64_t parse_uint64_option(const char *opt_name, const char *value) {
   const std::string arg = value;
   const std::string flag = format_flag(opt_name);
   if (end == value || *end != '\0') {
-    throw std::runtime_error("Error: invalid value for " + flag + ": '" + arg + "'.");
+    throw std::runtime_error("Error: invalid value for " + flag + ": '" + arg +
+                             "'.");
   }
   if (errno == ERANGE || parsed > std::numeric_limits<uint64_t>::max()) {
     throw std::runtime_error("Error: value for " + flag +
@@ -344,7 +346,8 @@ float parse_float_option(const char *opt_name, const char *value) {
   const std::string arg = value;
   const std::string flag = format_flag(opt_name);
   if (end == value || *end != '\0') {
-    throw std::runtime_error("Error: invalid value for " + flag + ": '" + arg + "'.");
+    throw std::runtime_error("Error: invalid value for " + flag + ": '" + arg +
+                             "'.");
   }
   if (errno == ERANGE || !std::isfinite(parsed) ||
       parsed < -std::numeric_limits<float>::max() ||
@@ -508,8 +511,7 @@ void run_gpu(const Config &cfg) {
     if (ngram_spans[i] > 0) {
       CUDA_CHECK(
           cudaMemset(hparams[i].counts, 0, ngram_spans[i] * sizeof(int)));
-      CUDA_CHECK(
-          cudaMemset(hparams[i].q, 0, ngram_spans[i] * sizeof(float)));
+      CUDA_CHECK(cudaMemset(hparams[i].q, 0, ngram_spans[i] * sizeof(float)));
     }
   }
 
