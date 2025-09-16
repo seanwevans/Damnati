@@ -265,6 +265,8 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
   atomicAdd(&scores[j], scoreB);
 }
 
+constexpr int MAX_NGRAM_DEPTH = 15;
+
 struct Config {
   int n_agents = 256;
   int rounds = 200;
@@ -316,8 +318,9 @@ void parse_cli(int argc, char **argv, Config &cfg) {
       break;
     case 'd':
       cfg.depth = std::atoi(optarg);
-      if (cfg.depth < 0) {
-        std::fprintf(stderr, "Error: --depth must be non-negative.\n");
+      if (cfg.depth < 0 || cfg.depth > MAX_NGRAM_DEPTH) {
+        std::fprintf(stderr, "Error: --depth must be in [0,%d].\n",
+                     MAX_NGRAM_DEPTH);
         std::exit(EXIT_FAILURE);
       }
       break;
@@ -342,7 +345,7 @@ void parse_cli(int argc, char **argv, Config &cfg) {
       std::printf("  --rounds R    rounds per match (>0)\n");
       std::printf("  --seed S      RNG seed\n");
       std::printf("  --p-ngram F   fraction of N-gram learners [0,1]\n");
-      std::printf("  --depth D     N-gram depth (>=0)\n");
+      std::printf("  --depth D     N-gram depth (0-%d)\n", MAX_NGRAM_DEPTH);
       std::printf("  --epsilon E   exploration rate [0,1]\n");
       std::printf("  --gtft P      GTFT forgiveness [0,1]\n");
       std::printf("\nExample:\n  %s --agents 512 --rounds 200 --p-ngram 0.6 "
