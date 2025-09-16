@@ -130,3 +130,28 @@ TEST_CASE("ngram_update accumulates payoffs", "[ngram]") {
   REQUIRE(counts[0 * 2 + C] == 2);
   REQUIRE(q[0 * 2 + C] == Approx(2.0f));
 }
+
+TEST_CASE("isqrt64 computes floor square roots", "[isqrt64]") {
+  struct Case {
+    long long input;
+    long long expected;
+  };
+  const Case cases[] = {{0, 0},
+                        {1, 1},
+                        {2, 1},
+                        {3, 1},
+                        {4, 2},
+                        {7, 2},
+                        {8, 2},
+                        {15, 3},
+                        {16, 4},
+                        {24, 4},
+                        {25, 5},
+                        {(1LL << 62) - 1, 2147483647LL},
+                        {(1LL << 62), 2147483648LL}};
+
+  for (const auto &c : cases) {
+    CAPTURE(c.input);
+    REQUIRE(isqrt64(c.input) == c.expected);
+  }
+}
