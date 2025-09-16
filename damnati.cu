@@ -8,6 +8,7 @@
 #include <cerrno>
 #include <cmath>
 #include <cstdint>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -53,6 +54,8 @@ enum Strategy : int {
   NGRAM
 };
 
+constexpr std::size_t INVALID_OFFSET = static_cast<std::size_t>(-1);
+
 __device__ __host__ __forceinline__ int dmin(int a, int b) {
   return a < b ? a : b;
 }
@@ -81,6 +84,23 @@ __device__ __host__ __forceinline__ long long isqrt64(long long x) {
     bit >>= 2;
   }
   return res;
+}
+
+__device__ __host__ __forceinline__ std::size_t ngram_span(int depth) {
+  return (static_cast<std::size_t>(1) << (2 * depth)) * 2;
+}
+
+__device__ __host__ __forceinline__ void pair_index_to_agents(long long idx,
+                                                              int n_agents,
+                                                              int &i_out,
+                                                              int &j_out) {
+  long long disc = -8LL * idx + 4LL * n_agents * (n_agents - 1) - 7LL;
+  long long s = isqrt64(disc);
+  int i = static_cast<int>(n_agents - 2 - ((s - 1) >> 1));
+  long long start = (long long)i * (2LL * n_agents - i - 1) / 2;
+  int j = static_cast<int>(i + 1 + (idx - start));
+  i_out = i;
+  j_out = j;
 }
 
 struct AgentParams {
@@ -207,21 +227,18 @@ choose_action(PlayerState &p, uint64_t seed, int i, int j, int r, int who) {
 
 __global__ void play_all_pairs(const AgentParams *__restrict__ params,
                                int n_agents, int rounds, uint64_t seed,
+                               const std::size_t *__restrict__ match_offsets,
+                               int *__restrict__ match_counts,
+                               float *__restrict__ match_q,
                                int *__restrict__ scores) {
   long long idx = blockIdx.x * blockDim.x + threadIdx.x;
   long long total = (long long)n_agents * (n_agents - 1) / 2;
   if (idx >= total)
     return;
 
-  // Invert the triangular number T(i) = i*(2n - i - 1)/2 to recover
-  // the agent indices (i,j) from the linear pair index `idx` without
-  // resorting to floating-point math.  The discriminant inside the square
-  // root fits in 64 bits for practical `n_agents`.
-  long long disc = -8LL * idx + 4LL * n_agents * (n_agents - 1) - 7LL;
-  long long s = isqrt64(disc);
-  int i = (int)(n_agents - 2 - ((s - 1) >> 1));
-  long long start = (long long)i * (2LL * n_agents - i - 1) / 2;
-  int j = (int)(i + 1 + (idx - start));
+  int i = 0;
+  int j = 0;
+  pair_index_to_agents(idx, n_agents, i, j);
 
   AgentParams Ai = params[i];
   AgentParams Bj = params[j];
@@ -233,10 +250,19 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
   B.strat = Bj.strat;
   B.gtft_forget = Bj.gtft_forget;
 
-  if (A.strat == NGRAM)
-    A.init_ngram(Ai.depth, Ai.epsilon, Ai.counts, Ai.q);
-  if (B.strat == NGRAM)
-    B.init_ngram(Bj.depth, Bj.epsilon, Bj.counts, Bj.q);
+  constexpr std::size_t invalid = INVALID_OFFSET;
+  if (A.strat == NGRAM) {
+    std::size_t offset = match_offsets[idx * 2 + 0];
+    assert(offset != invalid && match_counts && match_q);
+    A.init_ngram(Ai.depth, Ai.epsilon, match_counts + offset,
+                 match_q + offset);
+  }
+  if (B.strat == NGRAM) {
+    std::size_t offset = match_offsets[idx * 2 + 1];
+    assert(offset != invalid && match_counts && match_q);
+    B.init_ngram(Bj.depth, Bj.epsilon, match_counts + offset,
+                 match_q + offset);
+  }
 
   int scoreA = 0, scoreB = 0;
 
@@ -467,6 +493,31 @@ void build_population(const Config &cfg, std::vector<AgentParams> &hparams) {
   std::shuffle(hparams.begin(), hparams.end(), rng);
 }
 
+std::size_t compute_match_offsets(const std::vector<AgentParams> &hparams,
+                                  std::vector<std::size_t> &match_offsets) {
+  const int n = static_cast<int>(hparams.size());
+  long long total_pairs = static_cast<long long>(n) * (n - 1) / 2;
+  match_offsets.assign(static_cast<std::size_t>(total_pairs) * 2,
+                       INVALID_OFFSET);
+  std::size_t offset = 0;
+  for (long long idx = 0; idx < total_pairs; ++idx) {
+    int i = 0;
+    int j = 0;
+    pair_index_to_agents(idx, n, i, j);
+    if (hparams[i].strat == NGRAM) {
+      std::size_t span = ngram_span(hparams[i].depth);
+      match_offsets[static_cast<std::size_t>(idx) * 2 + 0] = offset;
+      offset += span;
+    }
+    if (hparams[j].strat == NGRAM) {
+      std::size_t span = ngram_span(hparams[j].depth);
+      match_offsets[static_cast<std::size_t>(idx) * 2 + 1] = offset;
+      offset += span;
+    }
+  }
+  return offset;
+}
+
 void run_gpu(const Config &cfg) {
   const int n = cfg.n_agents;
   const int rounds = cfg.rounds;
@@ -475,44 +526,29 @@ void run_gpu(const Config &cfg) {
   std::vector<AgentParams> hparams(n);
   build_population(cfg, hparams);
 
-  // Preallocate buffers for all N-gram agents
-  size_t total_states = 0;
-  for (int i = 0; i < n; ++i) {
-    if (hparams[i].strat == NGRAM) {
-      int states = 1 << (2 * hparams[i].depth);
-      total_states += (size_t)states * 2;
-    }
-  }
-  int *d_counts = nullptr;
-  float *d_q = nullptr;
-  if (total_states > 0) {
-    size_t counts_bytes = total_states * sizeof(int);
-    size_t q_bytes = total_states * sizeof(float);
-    CUDA_CHECK(cudaMalloc(&d_counts, counts_bytes));
-    CUDA_CHECK(cudaMalloc(&d_q, q_bytes));
-  }
-  std::vector<size_t> ngram_spans(n, 0);
-  size_t offset = 0;
-  for (int i = 0; i < n; ++i) {
-    if (hparams[i].strat == NGRAM) {
-      int states = 1 << (2 * hparams[i].depth);
-      size_t span = (size_t)states * 2;
-      hparams[i].counts = d_counts + offset;
-      hparams[i].q = d_q + offset;
-      ngram_spans[i] = span;
-      offset += span;
-    } else {
-      hparams[i].counts = nullptr;
-      hparams[i].q = nullptr;
-    }
+  long long total_pairs = static_cast<long long>(n) * (n - 1) / 2;
+  std::vector<std::size_t> match_offsets;
+  std::size_t total_span = 0;
+  if (total_pairs > 0) {
+    total_span = compute_match_offsets(hparams, match_offsets);
   }
 
-  for (int i = 0; i < n; ++i) {
-    if (ngram_spans[i] > 0) {
-      CUDA_CHECK(
-          cudaMemset(hparams[i].counts, 0, ngram_spans[i] * sizeof(int)));
-      CUDA_CHECK(cudaMemset(hparams[i].q, 0, ngram_spans[i] * sizeof(float)));
-    }
+  int *d_match_counts = nullptr;
+  float *d_match_q = nullptr;
+  if (total_span > 0) {
+    std::size_t counts_bytes = total_span * sizeof(int);
+    std::size_t q_bytes = total_span * sizeof(float);
+    CUDA_CHECK(cudaMalloc(&d_match_counts, counts_bytes));
+    CUDA_CHECK(cudaMalloc(&d_match_q, q_bytes));
+    CUDA_CHECK(cudaMemset(d_match_counts, 0, counts_bytes));
+    CUDA_CHECK(cudaMemset(d_match_q, 0, q_bytes));
+  }
+
+  std::size_t *d_match_offsets = nullptr;
+  if (!match_offsets.empty()) {
+    std::size_t offsets_bytes = match_offsets.size() * sizeof(std::size_t);
+    CUDA_CHECK(cudaMallocManaged(&d_match_offsets, offsets_bytes));
+    std::memcpy(d_match_offsets, match_offsets.data(), offsets_bytes);
   }
 
   AgentParams *d_params = nullptr;
@@ -522,7 +558,6 @@ void run_gpu(const Config &cfg) {
   std::memcpy(d_params, hparams.data(), n * sizeof(AgentParams));
   std::memset(d_scores, 0, n * sizeof(int));
 
-  long long total_pairs = (long long)n * (n - 1) / 2;
   if (total_pairs == 0) {
     std::fprintf(
         stderr,
@@ -531,7 +566,9 @@ void run_gpu(const Config &cfg) {
     int threads = 256;
     int blocks = (int)((total_pairs + threads - 1) / threads);
 
-    play_all_pairs<<<blocks, threads>>>(d_params, n, rounds, seed, d_scores);
+    play_all_pairs<<<blocks, threads>>>(d_params, n, rounds, seed,
+                                        d_match_offsets, d_match_counts,
+                                        d_match_q, d_scores);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
   }
@@ -595,10 +632,12 @@ void run_gpu(const Config &cfg) {
 
   CUDA_CHECK(cudaFree(d_params));
   CUDA_CHECK(cudaFree(d_scores));
-  if (d_counts)
-    CUDA_CHECK(cudaFree(d_counts));
-  if (d_q)
-    CUDA_CHECK(cudaFree(d_q));
+  if (d_match_offsets)
+    CUDA_CHECK(cudaFree(d_match_offsets));
+  if (d_match_counts)
+    CUDA_CHECK(cudaFree(d_match_counts));
+  if (d_match_q)
+    CUDA_CHECK(cudaFree(d_match_q));
 }
 
 #ifndef DAMNATI_NO_MAIN
