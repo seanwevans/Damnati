@@ -7,8 +7,8 @@
 #include <cassert>
 #include <cerrno>
 #include <cmath>
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -90,10 +90,8 @@ __device__ __host__ __forceinline__ std::size_t ngram_span(int depth) {
   return (static_cast<std::size_t>(1) << (2 * depth)) * 2;
 }
 
-__device__ __host__ __forceinline__ void pair_index_to_agents(long long idx,
-                                                              int n_agents,
-                                                              int &i_out,
-                                                              int &j_out) {
+__device__ __host__ __forceinline__ void
+pair_index_to_agents(long long idx, int n_agents, int &i_out, int &j_out) {
   long long disc = -8LL * idx + 4LL * n_agents * (n_agents - 1) - 7LL;
   long long s = isqrt64(disc);
   int i = static_cast<int>(n_agents - 2 - ((s - 1) >> 1));
@@ -254,14 +252,12 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
   if (A.strat == NGRAM) {
     std::size_t offset = match_offsets[idx * 2 + 0];
     assert(offset != invalid && match_counts && match_q);
-    A.init_ngram(Ai.depth, Ai.epsilon, match_counts + offset,
-                 match_q + offset);
+    A.init_ngram(Ai.depth, Ai.epsilon, match_counts + offset, match_q + offset);
   }
   if (B.strat == NGRAM) {
     std::size_t offset = match_offsets[idx * 2 + 1];
     assert(offset != invalid && match_counts && match_q);
-    B.init_ngram(Bj.depth, Bj.epsilon, match_counts + offset,
-                 match_q + offset);
+    B.init_ngram(Bj.depth, Bj.epsilon, match_counts + offset, match_q + offset);
   }
 
   int scoreA = 0, scoreB = 0;
