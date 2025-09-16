@@ -76,12 +76,12 @@ __device__ __host__ __forceinline__ long long isqrt64(long long x) {
 }
 
 struct AgentParams {
-  int strat;        // Strategy enum
-  float epsilon;    // N-gram ε
-  int depth;        // N-gram depth (determines memory size)
+  int strat;         // Strategy enum
+  float epsilon;     // N-gram ε
+  int depth;         // N-gram depth (determines memory size)
   float gtft_forget; // GTFT forgiveness prob
-  int *counts;      // Pointer into preallocated visit-count buffer
-  float *q;         // Pointer into preallocated Q-value buffer
+  int *counts;       // Pointer into preallocated visit-count buffer
+  float *q;          // Pointer into preallocated Q-value buffer
 };
 
 __device__ __constant__ int d_payA[4] = {Rw, Sw, Tw, Pw};
