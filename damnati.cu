@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cassert>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -200,8 +201,10 @@ choose_action(PlayerState &p, uint64_t seed, int i, int j, int r, int who) {
     return (p.opp_last == -1 ? D : p.opp_last);
   case NGRAM:
     return ngram_choose(p, seed, i, j, r, who);
+  default:
+    assert(!"Unknown strategy in choose_action");
+    return C;
   }
-  return C;
 }
 
 __global__ void play_all_pairs(const AgentParams *__restrict__ params,
