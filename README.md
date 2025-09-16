@@ -35,6 +35,9 @@ Run the simulator and adjust parameters using command line flags:
 - `--epsilon E`  – exploration rate for N-gram learners (default: 0.1)
 - `--gtft P`     – forgiveness probability for Generous Tit for Tat (default: 0.1)
 
+Passing an unknown option will print the usage information and exit with a
+non-zero status, so double-check flag names.
+
 ## Output
 
 The simulator prints summary statistics in JSON format, including average score, minimum and maximum scores, standard deviation, and per-strategy results. The top few agents and their scores are also listed.
