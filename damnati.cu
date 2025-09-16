@@ -402,14 +402,8 @@ void build_population(const Config &cfg, std::vector<AgentParams> &hparams) {
     hparams[i] = p;
   }
 
-  std::vector<int> idx(n);
-  for (int i = 0; i < n; ++i)
-    idx[i] = i;
   std::mt19937_64 rng(cfg.seed);
-  std::shuffle(idx.begin(), idx.end(), rng);
-  std::vector<AgentParams> copy = hparams;
-  for (int i = 0; i < n; ++i)
-    hparams[i] = copy[idx[i]];
+  std::shuffle(hparams.begin(), hparams.end(), rng);
 }
 
 void run_gpu(const Config &cfg) {
