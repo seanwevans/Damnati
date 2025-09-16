@@ -35,6 +35,9 @@ Run the simulator and adjust parameters using command line flags:
 - `--epsilon E`  – exploration rate for N-gram learners (default: 0.1)
 - `--gtft P`     – forgiveness probability for Generous Tit for Tat (default: 0.1)
 
+Passing an unknown option will print the usage information and exit with a
+non-zero status, so double-check flag names.
+
 ## Output
 
 The simulator prints summary statistics in JSON format, including average score, minimum and maximum scores, standard deviation, and per-strategy results. The top few agents and their scores are also listed.
@@ -45,8 +48,18 @@ Unit tests use the [Catch2](https://github.com/catchorg/Catch2) framework and ca
 compiled with `nvcc`. From the repository root run:
 
 ```bash
-nvcc -std=c++17 tests/test_core.cu -o tests/test_core && ./tests/test_core
+nvcc -std=c++17 tests/test_core.cu -o tests/test_core
+nvcc -std=c++17 tests/test_cli.cu -o tests/test_cli
 ```
 
-The tests cover strategy decision logic in `choose_action` and the payoff
-accumulation performed by `ngram_update`.
+Execute each binary to run the associated suite:
+
+```bash
+./tests/test_core
+./tests/test_cli
+```
+
+`test_core` exercises the strategy decision logic in `choose_action`, the payoff
+accumulation performed by `ngram_update`, and the 64-bit integer square root helper.
+`test_cli` verifies that command-line validation reports errors for malformed depth
+values and unknown options.
