@@ -269,6 +269,8 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
   atomicAdd(&scores[j], scoreB);
 }
 
+constexpr int MAX_NGRAM_DEPTH = 15;
+
 struct Config {
   int n_agents = 256;
   int rounds = 200;
@@ -336,8 +338,10 @@ void parse_cli(int argc, char **argv, Config &cfg) {
       break;
     case 'd':
       cfg.depth = std::atoi(optarg);
-      if (cfg.depth < 0) {
-        throw std::runtime_error("Error: --depth must be non-negative.");
+      if (cfg.depth < 0 || cfg.depth > MAX_NGRAM_DEPTH) {
+        std::fprintf(stderr, "Error: --depth must be in [0,%d].\n",
+                     MAX_NGRAM_DEPTH);
+        std::exit(EXIT_FAILURE);
       }
       break;
     case 'e':
