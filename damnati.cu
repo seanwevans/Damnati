@@ -2,6 +2,7 @@
 // Build: nvcc -O3 -arch=sm_86 damnati.cu -o damnati
 // Run:   ./damnati --agents 512 --rounds 200 --seed 42 --p-ngram 0.6
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -9,6 +10,7 @@
 #include <cstring>
 #include <cuda_runtime.h>
 #include <getopt.h>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -376,30 +378,6 @@ void parse_cli(int argc, char **argv, Config &cfg) {
 static const Strategy classics[12] = {AC,     AD,  TFT,  GTFT,   GRIM,   RANDOM,
                                       PAVLOV, ALT, JOSS, TESTER, REPEAT, S_TFT};
 
-static inline void iswap(int &a, int &b) {
-  int t = a;
-  a = b;
-  b = t;
-}
-
-static inline uint64_t host_mix64(uint64_t x) {
-  x += 0x9E3779B97f4A7C15ULL;
-  x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
-  x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
-  x = x ^ (x >> 31);
-  return x;
-}
-static void host_shuffle(std::vector<int> &idx, uint64_t seed) {
-  uint64_t x = seed ? seed : 0xA5A5A5A5A5A5A5A5ULL;
-  for (int i = (int)idx.size() - 1; i > 0; --i) {
-    x = host_mix64(x ^ (uint64_t)i);
-    int j = (int)(x % (uint64_t)(i + 1));
-    if (j < 0)
-      j = -j; // paranoia
-    iswap(idx[i], idx[j]);
-  }
-}
-
 void build_population(const Config &cfg, std::vector<AgentParams> &hparams) {
   const int n = cfg.n_agents;
   const int n_ng = int(cfg.p_ngram * n + 0.5f);
@@ -423,7 +401,8 @@ void build_population(const Config &cfg, std::vector<AgentParams> &hparams) {
   std::vector<int> idx(n);
   for (int i = 0; i < n; ++i)
     idx[i] = i;
-  host_shuffle(idx, cfg.seed);
+  std::mt19937_64 rng(cfg.seed);
+  std::shuffle(idx.begin(), idx.end(), rng);
   std::vector<AgentParams> copy = hparams;
   for (int i = 0; i < n; ++i)
     hparams[i] = copy[idx[i]];
