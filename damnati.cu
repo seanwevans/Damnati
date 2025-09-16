@@ -317,8 +317,7 @@ void parse_cli(int argc, char **argv, Config &cfg) {
     case 'a':
       cfg.n_agents = std::atoi(optarg);
       if (cfg.n_agents < 2) {
-        std::fprintf(stderr, "Error: --agents must be at least 2.\n");
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: --agents must be at least 2.");
       }
       break;
     case 'r':
@@ -339,9 +338,8 @@ void parse_cli(int argc, char **argv, Config &cfg) {
     case 'd':
       cfg.depth = std::atoi(optarg);
       if (cfg.depth < 0 || cfg.depth > MAX_NGRAM_DEPTH) {
-        std::fprintf(stderr, "Error: --depth must be in [0,%d].\n",
-                     MAX_NGRAM_DEPTH);
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error(std::string("Error: --depth must be in [0,") +
+                                 std::to_string(MAX_NGRAM_DEPTH) + "].");
       }
       break;
     case 'e':
