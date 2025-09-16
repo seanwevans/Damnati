@@ -285,9 +285,10 @@ static void print_usage(FILE *stream, const char *prog) {
   std::fprintf(stream, "  --depth D     N-gram depth (>=0)\n");
   std::fprintf(stream, "  --epsilon E   exploration rate [0,1]\n");
   std::fprintf(stream, "  --gtft P      GTFT forgiveness [0,1]\n");
-  std::fprintf(stream, "\nExample:\n  %s --agents 512 --rounds 200 --p-ngram 0.6 "
-                    "--depth 3 --epsilon 0.1 --gtft 0.2\n",
-                  prog);
+  std::fprintf(stream,
+               "\nExample:\n  %s --agents 512 --rounds 200 --p-ngram 0.6 "
+               "--depth 3 --epsilon 0.1 --gtft 0.2\n",
+               prog);
 }
 
 void parse_cli(int argc, char **argv, Config &cfg) {
