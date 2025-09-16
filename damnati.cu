@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <array>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -130,11 +132,6 @@ struct PlayerState {
     state = 0u;
     counts = cbuf;
     q = qbuf;
-    int n_states = 1 << (2 * d);
-    for (int i = 0; i < n_states * 2; ++i) {
-      counts[i] = 0;
-      q[i] = 0.0f;
-    }
   }
 };
 
@@ -202,8 +199,10 @@ choose_action(PlayerState &p, uint64_t seed, int i, int j, int r, int who) {
     return (p.opp_last == -1 ? D : p.opp_last);
   case NGRAM:
     return ngram_choose(p, seed, i, j, r, who);
+  default:
+    assert(!"Unknown strategy in choose_action");
+    return C;
   }
-  return C;
 }
 
 __global__ void play_all_pairs(const AgentParams *__restrict__ params,
@@ -378,8 +377,7 @@ void parse_cli(int argc, char **argv, Config &cfg) {
     case 'a':
       cfg.n_agents = parse_int_option("agents", optarg);
       if (cfg.n_agents < 2) {
-        std::fprintf(stderr, "Error: --agents must be at least 2.\n");
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error("Error: --agents must be at least 2.");
       }
       break;
     case 'r':
@@ -400,9 +398,8 @@ void parse_cli(int argc, char **argv, Config &cfg) {
     case 'd':
       cfg.depth = parse_int_option("depth", optarg);
       if (cfg.depth < 0 || cfg.depth > MAX_NGRAM_DEPTH) {
-        std::fprintf(stderr, "Error: --depth must be in [0,%d].\n",
-                     MAX_NGRAM_DEPTH);
-        std::exit(EXIT_FAILURE);
+        throw std::runtime_error(std::string("Error: --depth must be in [0,") +
+                                 std::to_string(MAX_NGRAM_DEPTH) + "].");
       }
       break;
     case 'e':
@@ -463,14 +460,8 @@ void build_population(const Config &cfg, std::vector<AgentParams> &hparams) {
     hparams[i] = p;
   }
 
-  std::vector<int> idx(n);
-  for (int i = 0; i < n; ++i)
-    idx[i] = i;
   std::mt19937_64 rng(cfg.seed);
-  std::shuffle(idx.begin(), idx.end(), rng);
-  std::vector<AgentParams> copy = hparams;
-  for (int i = 0; i < n; ++i)
-    hparams[i] = copy[idx[i]];
+  std::shuffle(hparams.begin(), hparams.end(), rng);
 }
 
 void run_gpu(const Config &cfg) {
@@ -496,19 +487,29 @@ void run_gpu(const Config &cfg) {
     size_t q_bytes = total_states * sizeof(float);
     CUDA_CHECK(cudaMalloc(&d_counts, counts_bytes));
     CUDA_CHECK(cudaMalloc(&d_q, q_bytes));
-    CUDA_CHECK(cudaMemset(d_counts, 0, counts_bytes));
-    CUDA_CHECK(cudaMemset(d_q, 0, q_bytes));
   }
+  std::vector<size_t> ngram_spans(n, 0);
   size_t offset = 0;
   for (int i = 0; i < n; ++i) {
     if (hparams[i].strat == NGRAM) {
       int states = 1 << (2 * hparams[i].depth);
+      size_t span = (size_t)states * 2;
       hparams[i].counts = d_counts + offset;
       hparams[i].q = d_q + offset;
-      offset += (size_t)states * 2;
+      ngram_spans[i] = span;
+      offset += span;
     } else {
       hparams[i].counts = nullptr;
       hparams[i].q = nullptr;
+    }
+  }
+
+  for (int i = 0; i < n; ++i) {
+    if (ngram_spans[i] > 0) {
+      CUDA_CHECK(
+          cudaMemset(hparams[i].counts, 0, ngram_spans[i] * sizeof(int)));
+      CUDA_CHECK(
+          cudaMemset(hparams[i].q, 0, ngram_spans[i] * sizeof(float)));
     }
   }
 
@@ -556,8 +557,9 @@ void run_gpu(const Config &cfg) {
   std::printf(" \"avg_score\":%.3f,\"min\":%d,\"max\":%d,\"stdev\":%.3f,\n",
               mean, minv, maxv, stdev);
 
-  double sum_by[14] = {0.0};
-  int cnt_by[14] = {0};
+  constexpr std::size_t strategy_count = static_cast<std::size_t>(NGRAM) + 1;
+  std::array<double, strategy_count> sum_by{};
+  std::array<int, strategy_count> cnt_by{};
   for (int i = 0; i < n; ++i) {
     sum_by[hparams[i].strat] += d_scores[i];
     cnt_by[hparams[i].strat]++;
@@ -567,8 +569,11 @@ void run_gpu(const Config &cfg) {
   const char *names[] = {"AC",     "AD",     "TFT",  "GTFT", "GRIM",
                          "RANDOM", "PAVLOV", "ALT",  "JOSS", "TESTER",
                          "REPEAT", "S_TFT",  "NGRAM"};
+  constexpr std::size_t names_count = sizeof(names) / sizeof(names[0]);
+  static_assert(strategy_count == names_count,
+                "Strategy names array must match strategy count");
   bool first = true;
-  for (int s = 0; s <= NGRAM; ++s) {
+  for (std::size_t s = 0; s < strategy_count; ++s) {
     if (cnt_by[s] == 0)
       continue;
     if (!first) {
