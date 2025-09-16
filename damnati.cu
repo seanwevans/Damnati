@@ -275,6 +275,21 @@ struct Config {
   float gtft_p = 0.1f;  // GTFT forgiveness
 };
 
+static void print_usage(FILE *stream, const char *prog) {
+  std::fprintf(stream, "Usage: %s [OPTIONS]\n\n", prog);
+  std::fprintf(stream, "Options:\n");
+  std::fprintf(stream, "  --agents N    number of agents (>0)\n");
+  std::fprintf(stream, "  --rounds R    rounds per match (>0)\n");
+  std::fprintf(stream, "  --seed S      RNG seed\n");
+  std::fprintf(stream, "  --p-ngram F   fraction of N-gram learners [0,1]\n");
+  std::fprintf(stream, "  --depth D     N-gram depth (>=0)\n");
+  std::fprintf(stream, "  --epsilon E   exploration rate [0,1]\n");
+  std::fprintf(stream, "  --gtft P      GTFT forgiveness [0,1]\n");
+  std::fprintf(stream, "\nExample:\n  %s --agents 512 --rounds 200 --p-ngram 0.6 "
+                    "--depth 3 --epsilon 0.1 --gtft 0.2\n",
+                  prog);
+}
+
 void parse_cli(int argc, char **argv, Config &cfg) {
   static const struct option long_opts[] = {
       {"agents", required_argument, nullptr, 'a'},
@@ -336,21 +351,16 @@ void parse_cli(int argc, char **argv, Config &cfg) {
       }
       break;
     case 'h':
-      std::printf("Usage: %s [OPTIONS]\n\n", argv[0]);
-      std::printf("Options:\n");
-      std::printf("  --agents N    number of agents (>0)\n");
-      std::printf("  --rounds R    rounds per match (>0)\n");
-      std::printf("  --seed S      RNG seed\n");
-      std::printf("  --p-ngram F   fraction of N-gram learners [0,1]\n");
-      std::printf("  --depth D     N-gram depth (>=0)\n");
-      std::printf("  --epsilon E   exploration rate [0,1]\n");
-      std::printf("  --gtft P      GTFT forgiveness [0,1]\n");
-      std::printf("\nExample:\n  %s --agents 512 --rounds 200 --p-ngram 0.6 "
-                  "--depth 3 --epsilon 0.1 --gtft 0.2\n",
-                  argv[0]);
+      print_usage(stdout, argv[0]);
       std::exit(0);
     default:
-      break;
+      if (optind > 0 && optind <= argc) {
+        std::fprintf(stderr, "Error: unknown option '%s'.\n", argv[optind - 1]);
+      } else {
+        std::fprintf(stderr, "Error: unknown option encountered.\n");
+      }
+      print_usage(stderr, argv[0]);
+      std::exit(EXIT_FAILURE);
     }
   }
 }
