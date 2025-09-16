@@ -34,8 +34,7 @@ TEST_CASE("parse_cli rejects invalid depth and unknown options", "[cli]") {
       parse_cli(argc, argv, cfg);
       FAIL("parse_cli should have thrown for too few agents");
     } catch (const std::runtime_error &ex) {
-      REQUIRE(std::string(ex.what()) ==
-              "Error: --agents must be at least 2.");
+      REQUIRE(std::string(ex.what()) == "Error: --agents must be at least 2.");
     }
   }
 
