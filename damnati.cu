@@ -128,11 +128,6 @@ struct PlayerState {
     state = 0u;
     counts = cbuf;
     q = qbuf;
-    int n_states = 1 << (2 * d);
-    for (int i = 0; i < n_states * 2; ++i) {
-      counts[i] = 0;
-      q[i] = 0.0f;
-    }
   }
 };
 
@@ -435,19 +430,29 @@ void run_gpu(const Config &cfg) {
     size_t q_bytes = total_states * sizeof(float);
     CUDA_CHECK(cudaMalloc(&d_counts, counts_bytes));
     CUDA_CHECK(cudaMalloc(&d_q, q_bytes));
-    CUDA_CHECK(cudaMemset(d_counts, 0, counts_bytes));
-    CUDA_CHECK(cudaMemset(d_q, 0, q_bytes));
   }
+  std::vector<size_t> ngram_spans(n, 0);
   size_t offset = 0;
   for (int i = 0; i < n; ++i) {
     if (hparams[i].strat == NGRAM) {
       int states = 1 << (2 * hparams[i].depth);
+      size_t span = (size_t)states * 2;
       hparams[i].counts = d_counts + offset;
       hparams[i].q = d_q + offset;
-      offset += (size_t)states * 2;
+      ngram_spans[i] = span;
+      offset += span;
     } else {
       hparams[i].counts = nullptr;
       hparams[i].q = nullptr;
+    }
+  }
+
+  for (int i = 0; i < n; ++i) {
+    if (ngram_spans[i] > 0) {
+      CUDA_CHECK(
+          cudaMemset(hparams[i].counts, 0, ngram_spans[i] * sizeof(int)));
+      CUDA_CHECK(
+          cudaMemset(hparams[i].q, 0, ngram_spans[i] * sizeof(float)));
     }
   }
 
