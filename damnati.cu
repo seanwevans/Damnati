@@ -312,8 +312,9 @@ void parse_cli(int argc, char **argv, Config &cfg) {
     switch (opt) {
     case 'a':
       cfg.n_agents = std::atoi(optarg);
-      if (cfg.n_agents <= 0) {
-        throw std::runtime_error("Error: --agents must be positive.");
+      if (cfg.n_agents < 2) {
+        std::fprintf(stderr, "Error: --agents must be at least 2.\n");
+        std::exit(EXIT_FAILURE);
       }
       break;
     case 'r':
@@ -477,12 +478,18 @@ void run_gpu(const Config &cfg) {
   std::memset(d_scores, 0, n * sizeof(int));
 
   long long total_pairs = (long long)n * (n - 1) / 2;
-  int threads = 256;
-  int blocks = (int)((total_pairs + threads - 1) / threads);
+  if (total_pairs == 0) {
+    std::fprintf(
+        stderr,
+        "Warning: not enough agents to form pairs; skipping kernel launch.\n");
+  } else {
+    int threads = 256;
+    int blocks = (int)((total_pairs + threads - 1) / threads);
 
-  play_all_pairs<<<blocks, threads>>>(d_params, n, rounds, seed, d_scores);
-  CUDA_CHECK(cudaGetLastError());
-  CUDA_CHECK(cudaDeviceSynchronize());
+    play_all_pairs<<<blocks, threads>>>(d_params, n, rounds, seed, d_scores);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
+  }
 
   long long total = 0;
   int minv = 2147483647;
