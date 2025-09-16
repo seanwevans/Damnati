@@ -30,7 +30,8 @@ TEST_CASE("parse_cli rejects invalid depth and unknown options", "[cli]") {
       parse_cli(argc, argv, cfg);
       FAIL("parse_cli should have thrown for unknown option");
     } catch (const std::runtime_error &ex) {
-      REQUIRE(std::string(ex.what()).find("unrecognized option") != std::string::npos);
+      REQUIRE(std::string(ex.what()).find("unrecognized option") !=
+              std::string::npos);
     }
   }
 }

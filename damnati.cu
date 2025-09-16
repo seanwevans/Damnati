@@ -348,9 +348,9 @@ void parse_cli(int argc, char **argv, Config &cfg) {
                   argv[0]);
       std::exit(0);
     case '?': {
-      std::string flag =
-          (optind > 0 && optind - 1 < argc) ? std::string(argv[optind - 1])
-                                            : std::string();
+      std::string flag = (optind > 0 && optind - 1 < argc)
+                             ? std::string(argv[optind - 1])
+                             : std::string();
       if (!flag.empty())
         throw std::runtime_error("Error: unrecognized option '" + flag + "'.");
       throw std::runtime_error("Error: unrecognized option.");
