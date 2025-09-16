@@ -3,6 +3,7 @@
 // Run:   ./damnati --agents 512 --rounds 200 --seed 42 --p-ngram 0.6
 
 #include <algorithm>
+#include <cerrno>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -10,6 +11,7 @@
 #include <cstring>
 #include <cuda_runtime.h>
 #include <getopt.h>
+#include <limits>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -297,6 +299,65 @@ static void print_usage(FILE *stream, const char *prog) {
                prog);
 }
 
+namespace {
+
+std::string format_flag(const char *opt_name) {
+  return std::string("--") + opt_name;
+}
+
+int parse_int_option(const char *opt_name, const char *value) {
+  errno = 0;
+  char *end = nullptr;
+  long parsed = std::strtol(value, &end, 10);
+  const std::string arg = value;
+  const std::string flag = format_flag(opt_name);
+  if (end == value || *end != '\0') {
+    throw std::runtime_error("Error: invalid value for " + flag + ": '" + arg + "'.");
+  }
+  if (errno == ERANGE || parsed < std::numeric_limits<int>::min() ||
+      parsed > std::numeric_limits<int>::max()) {
+    throw std::runtime_error("Error: value for " + flag +
+                             " is out of range: '" + arg + "'.");
+  }
+  return static_cast<int>(parsed);
+}
+
+uint64_t parse_uint64_option(const char *opt_name, const char *value) {
+  errno = 0;
+  char *end = nullptr;
+  unsigned long long parsed = std::strtoull(value, &end, 10);
+  const std::string arg = value;
+  const std::string flag = format_flag(opt_name);
+  if (end == value || *end != '\0') {
+    throw std::runtime_error("Error: invalid value for " + flag + ": '" + arg + "'.");
+  }
+  if (errno == ERANGE || parsed > std::numeric_limits<uint64_t>::max()) {
+    throw std::runtime_error("Error: value for " + flag +
+                             " is out of range: '" + arg + "'.");
+  }
+  return static_cast<uint64_t>(parsed);
+}
+
+float parse_float_option(const char *opt_name, const char *value) {
+  errno = 0;
+  char *end = nullptr;
+  double parsed = std::strtod(value, &end);
+  const std::string arg = value;
+  const std::string flag = format_flag(opt_name);
+  if (end == value || *end != '\0') {
+    throw std::runtime_error("Error: invalid value for " + flag + ": '" + arg + "'.");
+  }
+  if (errno == ERANGE || !std::isfinite(parsed) ||
+      parsed < -std::numeric_limits<float>::max() ||
+      parsed > std::numeric_limits<float>::max()) {
+    throw std::runtime_error("Error: value for " + flag +
+                             " is out of range: '" + arg + "'.");
+  }
+  return static_cast<float>(parsed);
+}
+
+} // namespace
+
 void parse_cli(int argc, char **argv, Config &cfg) {
   static const struct option long_opts[] = {
       {"agents", required_argument, nullptr, 'a'},
@@ -315,29 +376,29 @@ void parse_cli(int argc, char **argv, Config &cfg) {
   while ((opt = getopt_long(argc, argv, "", long_opts, nullptr)) != -1) {
     switch (opt) {
     case 'a':
-      cfg.n_agents = std::atoi(optarg);
+      cfg.n_agents = parse_int_option("agents", optarg);
       if (cfg.n_agents < 2) {
         std::fprintf(stderr, "Error: --agents must be at least 2.\n");
         std::exit(EXIT_FAILURE);
       }
       break;
     case 'r':
-      cfg.rounds = std::atoi(optarg);
+      cfg.rounds = parse_int_option("rounds", optarg);
       if (cfg.rounds <= 0) {
         throw std::runtime_error("Error: --rounds must be positive.");
       }
       break;
     case 's':
-      cfg.seed = std::strtoull(optarg, nullptr, 10);
+      cfg.seed = parse_uint64_option("seed", optarg);
       break;
     case 'p':
-      cfg.p_ngram = std::atof(optarg);
+      cfg.p_ngram = parse_float_option("p-ngram", optarg);
       if (cfg.p_ngram < 0.0f || cfg.p_ngram > 1.0f) {
         throw std::runtime_error("Error: --p-ngram must be in [0,1].");
       }
       break;
     case 'd':
-      cfg.depth = std::atoi(optarg);
+      cfg.depth = parse_int_option("depth", optarg);
       if (cfg.depth < 0 || cfg.depth > MAX_NGRAM_DEPTH) {
         std::fprintf(stderr, "Error: --depth must be in [0,%d].\n",
                      MAX_NGRAM_DEPTH);
@@ -345,13 +406,13 @@ void parse_cli(int argc, char **argv, Config &cfg) {
       }
       break;
     case 'e':
-      cfg.epsilon = std::atof(optarg);
+      cfg.epsilon = parse_float_option("epsilon", optarg);
       if (cfg.epsilon < 0.0f || cfg.epsilon > 1.0f) {
         throw std::runtime_error("Error: --epsilon must be in [0,1].");
       }
       break;
     case 'g':
-      cfg.gtft_p = std::atof(optarg);
+      cfg.gtft_p = parse_float_option("gtft", optarg);
       if (cfg.gtft_p < 0.0f || cfg.gtft_p > 1.0f) {
         throw std::runtime_error("Error: --gtft must be in [0,1].");
       }
