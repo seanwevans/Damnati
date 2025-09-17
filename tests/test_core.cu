@@ -241,3 +241,55 @@ TEST_CASE("GPU tournament with multiple N-gram agents is deterministic",
   CUDA_CHECK(cudaFree(d_params));
   CUDA_CHECK(cudaFree(d_scores));
 }
+
+TEST_CASE("GPU tournament without N-gram agents avoids auxiliary buffers",
+          "[gpu][no_ngram]") {
+  const int n_agents = 4;
+  const int rounds = 10;
+  const uint64_t seed = 1337ULL;
+
+  std::vector<AgentParams> agents(n_agents);
+  const Strategy roster[n_agents] = {AC, AD, TFT, GRIM};
+  for (int i = 0; i < n_agents; ++i) {
+    agents[i].strat = roster[i];
+    agents[i].depth = 0;
+    agents[i].epsilon = 0.0f;
+    agents[i].gtft_forget = 0.0f;
+    agents[i].counts = nullptr;
+    agents[i].q = nullptr;
+  }
+
+  const long long total_pairs = static_cast<long long>(n_agents) *
+                                static_cast<long long>(n_agents - 1) / 2;
+  REQUIRE(total_pairs > 0);
+
+  std::vector<std::size_t> match_offsets;
+  std::size_t total_span = compute_match_offsets(agents, match_offsets);
+  REQUIRE(total_span == 0);
+  REQUIRE(match_offsets.size() == static_cast<std::size_t>(total_pairs) * 2);
+  for (std::size_t offset : match_offsets) {
+    REQUIRE(offset == INVALID_OFFSET);
+  }
+
+  AgentParams *d_params = nullptr;
+  int *d_scores = nullptr;
+  CUDA_CHECK(cudaMallocManaged(&d_params, n_agents * sizeof(AgentParams)));
+  CUDA_CHECK(cudaMallocManaged(&d_scores, n_agents * sizeof(int)));
+  std::memcpy(d_params, agents.data(), n_agents * sizeof(AgentParams));
+  CUDA_CHECK(cudaMemset(d_scores, 0, n_agents * sizeof(int)));
+
+  int threads = 64;
+  int blocks = static_cast<int>((total_pairs + threads - 1) / threads);
+  play_all_pairs<<<blocks, threads>>>(d_params, n_agents, rounds, seed,
+                                      nullptr, nullptr, nullptr, d_scores);
+  CUDA_CHECK(cudaGetLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
+
+  std::vector<int> scores(d_scores, d_scores + n_agents);
+  for (int value : scores) {
+    REQUIRE(value >= 0);
+  }
+
+  CUDA_CHECK(cudaFree(d_params));
+  CUDA_CHECK(cudaFree(d_scores));
+}

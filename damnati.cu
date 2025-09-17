@@ -250,13 +250,23 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
 
   constexpr std::size_t invalid = INVALID_OFFSET;
   if (A.strat == NGRAM) {
+    assert(match_offsets && match_counts && match_q);
+    if (!(match_offsets && match_counts && match_q))
+      return;
     std::size_t offset = match_offsets[idx * 2 + 0];
-    assert(offset != invalid && match_counts && match_q);
+    assert(offset != invalid);
+    if (offset == invalid)
+      return;
     A.init_ngram(Ai.depth, Ai.epsilon, match_counts + offset, match_q + offset);
   }
   if (B.strat == NGRAM) {
+    assert(match_offsets && match_counts && match_q);
+    if (!(match_offsets && match_counts && match_q))
+      return;
     std::size_t offset = match_offsets[idx * 2 + 1];
-    assert(offset != invalid && match_counts && match_q);
+    assert(offset != invalid);
+    if (offset == invalid)
+      return;
     B.init_ngram(Bj.depth, Bj.epsilon, match_counts + offset, match_q + offset);
   }
 
@@ -470,7 +480,7 @@ void parse_cli(int argc, char **argv, Config &cfg) {
 static const Strategy classics[12] = {AC,     AD,  TFT,  GTFT,   GRIM,   RANDOM,
                                       PAVLOV, ALT, JOSS, TESTER, REPEAT, S_TFT};
 
-void build_population(const Config &cfg, std::vector<AgentParams> &hparams) {
+int build_population(const Config &cfg, std::vector<AgentParams> &hparams) {
   const int n = cfg.n_agents;
   const int n_ng = int(cfg.p_ngram * n + 0.5f);
   for (int i = 0; i < n; ++i) {
@@ -492,6 +502,7 @@ void build_population(const Config &cfg, std::vector<AgentParams> &hparams) {
 
   std::mt19937_64 rng(cfg.seed);
   std::shuffle(hparams.begin(), hparams.end(), rng);
+  return n_ng;
 }
 
 std::size_t compute_match_offsets(const std::vector<AgentParams> &hparams,
@@ -525,12 +536,12 @@ void run_gpu(const Config &cfg) {
   const uint64_t seed = cfg.seed;
 
   std::vector<AgentParams> hparams(n);
-  build_population(cfg, hparams);
+  int n_ngram = build_population(cfg, hparams);
 
   long long total_pairs = static_cast<long long>(n) * (n - 1) / 2;
   std::vector<std::size_t> match_offsets;
   std::size_t total_span = 0;
-  if (total_pairs > 0) {
+  if (total_pairs > 0 && n_ngram > 0) {
     total_span = compute_match_offsets(hparams, match_offsets);
   }
 
