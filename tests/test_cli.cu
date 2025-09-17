@@ -39,6 +39,17 @@ TEST_CASE("parse_cli rejects invalid depth and unknown options", "[cli]") {
   }
 
   {
+    cfg = Config{};
+    char prog[] = "damnati";
+    char rounds[] = "--rounds";
+    char big[] = "2000000000";
+    char *argv[] = {prog, rounds, big, nullptr};
+    int argc = 3;
+    REQUIRE_NOTHROW(parse_cli(argc, argv, cfg));
+    REQUIRE(cfg.rounds == 2000000000);
+  }
+
+  {
     char prog[] = "damnati";
     char unknown[] = "--unknown";
     char *argv[] = {prog, unknown, nullptr};
