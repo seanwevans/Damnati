@@ -228,7 +228,7 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
                                const std::size_t *__restrict__ match_offsets,
                                int *__restrict__ match_counts,
                                float *__restrict__ match_q,
-                               int *__restrict__ scores) {
+                               long long *__restrict__ scores) {
   long long idx = blockIdx.x * blockDim.x + threadIdx.x;
   long long total = (long long)n_agents * (n_agents - 1) / 2;
   if (idx >= total)
@@ -260,7 +260,8 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
     B.init_ngram(Bj.depth, Bj.epsilon, match_counts + offset, match_q + offset);
   }
 
-  int scoreA = 0, scoreB = 0;
+  long long scoreA = 0;
+  long long scoreB = 0;
 
 #pragma unroll 1
   for (int r = 0; r < rounds; ++r) {
@@ -553,11 +554,11 @@ void run_gpu(const Config &cfg) {
   }
 
   AgentParams *d_params = nullptr;
-  int *d_scores = nullptr;
+  long long *d_scores = nullptr;
   CUDA_CHECK(cudaMallocManaged(&d_params, n * sizeof(AgentParams)));
-  CUDA_CHECK(cudaMallocManaged(&d_scores, n * sizeof(int)));
+  CUDA_CHECK(cudaMallocManaged(&d_scores, n * sizeof(long long)));
   std::memcpy(d_params, hparams.data(), n * sizeof(AgentParams));
-  std::memset(d_scores, 0, n * sizeof(int));
+  std::memset(d_scores, 0, n * sizeof(long long));
 
   if (total_pairs == 0) {
     std::fprintf(
@@ -575,33 +576,36 @@ void run_gpu(const Config &cfg) {
   }
 
   long long total = 0;
-  int minv = 2147483647;
-  int maxv = -2147483647 - 1;
+  long long minv = std::numeric_limits<long long>::max();
+  long long maxv = std::numeric_limits<long long>::min();
   for (int i = 0; i < n; ++i) {
     total += d_scores[i];
-    minv = dmin(minv, d_scores[i]);
-    maxv = dmax(maxv, d_scores[i]);
+    minv = std::min(minv, d_scores[i]);
+    maxv = std::max(maxv, d_scores[i]);
   }
 
-  double mean = double(total) / double(n);
+  long double mean = static_cast<long double>(total) /
+                     static_cast<long double>(std::max(1, n));
   long double varacc = 0.0L;
   for (int i = 0; i < n; ++i) {
-    long double d = (long double)d_scores[i] - (long double)mean;
+    long double d = static_cast<long double>(d_scores[i]) - mean;
     varacc += d * d;
   }
-  double stdev = std::sqrt(double(varacc / (n > 1 ? (n - 1) : 1)));
+  long double variance =
+      varacc / static_cast<long double>(n > 1 ? (n - 1) : 1);
+  double stdev = std::sqrt(static_cast<double>(variance));
 
   std::printf("{\"agents\":%d,\"rounds\":%d,\"p_ngram\":%.3f,\"depth\":%d,"
               "\"epsilon\":%.3f,\n",
               n, rounds, cfg.p_ngram, cfg.depth, cfg.epsilon);
-  std::printf(" \"avg_score\":%.3f,\"min\":%d,\"max\":%d,\"stdev\":%.3f,\n",
-              mean, minv, maxv, stdev);
+  std::printf(" \"avg_score\":%.3f,\"min\":%lld,\"max\":%lld,\"stdev\":%.3f,\n",
+              static_cast<double>(mean), minv, maxv, stdev);
 
   constexpr std::size_t strategy_count = static_cast<std::size_t>(NGRAM) + 1;
-  std::array<double, strategy_count> sum_by{};
+  std::array<long double, strategy_count> sum_by{};
   std::array<int, strategy_count> cnt_by{};
   for (int i = 0; i < n; ++i) {
-    sum_by[hparams[i].strat] += d_scores[i];
+    sum_by[hparams[i].strat] += static_cast<long double>(d_scores[i]);
     cnt_by[hparams[i].strat]++;
   }
 
@@ -619,15 +623,16 @@ void run_gpu(const Config &cfg) {
     if (!first) {
       std::printf(",");
     }
+    long double denom = static_cast<long double>(std::max(1, cnt_by[s]));
     std::printf("\"%s\":{\"mean\":%.3f,\"count\":%d}", names[s],
-                sum_by[s] / (double)dmax(1, cnt_by[s]), cnt_by[s]);
+                static_cast<double>(sum_by[s] / denom), cnt_by[s]);
     first = false;
   }
   std::printf("}}\n");
 
   int show = dmin(10, n);
   for (int i = 0; i < show; ++i) {
-    std::printf("agent[%d]: strat=%s score=%d\n", i, names[hparams[i].strat],
+    std::printf("agent[%d]: strat=%s score=%lld\n", i, names[hparams[i].strat],
                 d_scores[i]);
   }
 
