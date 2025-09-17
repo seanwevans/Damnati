@@ -591,8 +591,7 @@ void run_gpu(const Config &cfg) {
     long double d = static_cast<long double>(d_scores[i]) - mean;
     varacc += d * d;
   }
-  long double variance =
-      varacc / static_cast<long double>(n > 1 ? (n - 1) : 1);
+  long double variance = varacc / static_cast<long double>(n > 1 ? (n - 1) : 1);
   double stdev = std::sqrt(static_cast<double>(variance));
 
   std::printf("{\"agents\":%d,\"rounds\":%d,\"p_ngram\":%.3f,\"depth\":%d,"
