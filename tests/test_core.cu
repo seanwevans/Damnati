@@ -280,8 +280,8 @@ TEST_CASE("GPU tournament without N-gram agents avoids auxiliary buffers",
 
   int threads = 64;
   int blocks = static_cast<int>((total_pairs + threads - 1) / threads);
-  play_all_pairs<<<blocks, threads>>>(d_params, n_agents, rounds, seed,
-                                      nullptr, nullptr, nullptr, d_scores);
+  play_all_pairs<<<blocks, threads>>>(d_params, n_agents, rounds, seed, nullptr,
+                                      nullptr, nullptr, d_scores);
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
 
