@@ -542,13 +542,12 @@ sorted_agent_scores(const long long *scores, int count) {
   for (int i = 0; i < count; ++i) {
     ranked.emplace_back(i, scores[i]);
   }
-  std::sort(ranked.begin(), ranked.end(),
-            [](const auto &lhs, const auto &rhs) {
-              if (lhs.second != rhs.second) {
-                return lhs.second > rhs.second;
-              }
-              return lhs.first < rhs.first;
-            });
+  std::sort(ranked.begin(), ranked.end(), [](const auto &lhs, const auto &rhs) {
+    if (lhs.second != rhs.second) {
+      return lhs.second > rhs.second;
+    }
+    return lhs.first < rhs.first;
+  });
   return ranked;
 }
 
@@ -667,8 +666,8 @@ void run_gpu(const Config &cfg) {
   for (int r = 0; r < show && r < static_cast<int>(ranked.size()); ++r) {
     const auto &entry = ranked[r];
     int idx = entry.first;
-    std::printf("agent[%d]: strat=%s score=%lld\n", idx, names[hparams[idx].strat],
-                entry.second);
+    std::printf("agent[%d]: strat=%s score=%lld\n", idx,
+                names[hparams[idx].strat], entry.second);
   }
 
   CUDA_CHECK(cudaFree(d_params));
