@@ -408,8 +408,8 @@ void parse_cli(int argc, char **argv, Config &cfg) {
   opterr = 0;
   optind = 1;
   int opt;
-  while ((opt = getopt_long(argc, argv, ":a:r:s:p:d:e:g:h", long_opts, nullptr)) !=
-         -1) {
+  while ((opt = getopt_long(argc, argv, ":a:r:s:p:d:e:g:h", long_opts,
+                            nullptr)) != -1) {
     switch (opt) {
     case 'a':
       cfg.n_agents = parse_int_option("agents", optarg);
