@@ -39,6 +39,21 @@ TEST_CASE("parse_cli rejects invalid depth and unknown options", "[cli]") {
   }
 
   {
+    char prog[] = "damnati";
+    char agents[] = "--agents";
+    char rounds[] = "--rounds";
+    char ten[] = "10";
+    char *argv[] = {prog, agents, rounds, ten, nullptr};
+    int argc = 4;
+    try {
+      parse_cli(argc, argv, cfg);
+      FAIL("parse_cli should have thrown for missing agents value");
+    } catch (const std::runtime_error &ex) {
+      REQUIRE(std::string(ex.what()) == "Error: --agents requires a value.");
+    }
+  }
+
+  {
     cfg = Config{};
     char prog[] = "damnati";
     char rounds[] = "--rounds";

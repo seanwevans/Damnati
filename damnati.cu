@@ -408,7 +408,8 @@ void parse_cli(int argc, char **argv, Config &cfg) {
   opterr = 0;
   optind = 1;
   int opt;
-  while ((opt = getopt_long(argc, argv, "", long_opts, nullptr)) != -1) {
+  while ((opt = getopt_long(argc, argv, ":a:r:s:p:d:e:g:h", long_opts, nullptr)) !=
+         -1) {
     switch (opt) {
     case 'a':
       cfg.n_agents = parse_int_option("agents", optarg);
@@ -453,6 +454,43 @@ void parse_cli(int argc, char **argv, Config &cfg) {
     case 'h':
       print_usage(stdout, argv[0]);
       std::exit(0);
+    case ':': {
+      const char *flag_name = nullptr;
+      switch (optopt) {
+      case 'a':
+        flag_name = "--agents";
+        break;
+      case 'r':
+        flag_name = "--rounds";
+        break;
+      case 's':
+        flag_name = "--seed";
+        break;
+      case 'p':
+        flag_name = "--p-ngram";
+        break;
+      case 'd':
+        flag_name = "--depth";
+        break;
+      case 'e':
+        flag_name = "--epsilon";
+        break;
+      case 'g':
+        flag_name = "--gtft";
+        break;
+      default:
+        break;
+      }
+      std::string flag;
+      if (flag_name != nullptr) {
+        flag = flag_name;
+      } else if (optind > 0 && optind - 1 < argc) {
+        flag = argv[optind - 1];
+      } else {
+        flag = "option";
+      }
+      throw std::runtime_error("Error: " + flag + " requires a value.");
+    }
     case '?': {
       std::string flag = (optind > 0 && optind - 1 < argc)
                              ? std::string(argv[optind - 1])
