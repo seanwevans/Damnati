@@ -519,11 +519,19 @@ std::size_t compute_match_offsets(const std::vector<AgentParams> &hparams,
     pair_index_to_agents(idx, n, i, j);
     if (hparams[i].strat == NGRAM) {
       std::size_t span = ngram_span(hparams[i].depth);
+      if (span > std::numeric_limits<std::size_t>::max() - offset) {
+        throw std::overflow_error(
+            "Error: match-count buffer size exceeds addressable memory range.");
+      }
       match_offsets[static_cast<std::size_t>(idx) * 2 + 0] = offset;
       offset += span;
     }
     if (hparams[j].strat == NGRAM) {
       std::size_t span = ngram_span(hparams[j].depth);
+      if (span > std::numeric_limits<std::size_t>::max() - offset) {
+        throw std::overflow_error(
+            "Error: match-count buffer size exceeds addressable memory range.");
+      }
       match_offsets[static_cast<std::size_t>(idx) * 2 + 1] = offset;
       offset += span;
     }
@@ -549,6 +557,15 @@ void run_gpu(const Config &cfg) {
   int *d_match_counts = nullptr;
   float *d_match_q = nullptr;
   if (total_span > 0) {
+    const std::size_t max_size = std::numeric_limits<std::size_t>::max();
+    if (total_span > max_size / sizeof(int)) {
+      throw std::overflow_error(
+          "Error: match-count buffer allocation exceeds size limits.");
+    }
+    if (total_span > max_size / sizeof(float)) {
+      throw std::overflow_error(
+          "Error: match-Q buffer allocation exceeds size limits.");
+    }
     std::size_t counts_bytes = total_span * sizeof(int);
     std::size_t q_bytes = total_span * sizeof(float);
     CUDA_CHECK(cudaMalloc(&d_match_counts, counts_bytes));

@@ -293,3 +293,30 @@ TEST_CASE("GPU tournament without N-gram agents avoids auxiliary buffers",
   CUDA_CHECK(cudaFree(d_params));
   CUDA_CHECK(cudaFree(d_scores));
 }
+
+TEST_CASE("compute_match_offsets detects span overflow", "[overflow]") {
+  std::vector<AgentParams> agents(2);
+  for (auto &agent : agents) {
+    agent.strat = NGRAM;
+    agent.depth = 31;
+    agent.epsilon = 0.0f;
+    agent.gtft_forget = 0.0f;
+  }
+
+  std::vector<std::size_t> match_offsets;
+  REQUIRE_THROWS_AS(compute_match_offsets(agents, match_offsets),
+                    std::overflow_error);
+}
+
+TEST_CASE("run_gpu guards against oversized allocations", "[overflow][gpu]") {
+  Config cfg;
+  cfg.n_agents = 2;
+  cfg.rounds = 1;
+  cfg.seed = 0ULL;
+  cfg.p_ngram = 0.25f; // ensures exactly one N-gram agent after rounding
+  cfg.depth = 31;
+  cfg.epsilon = 0.0f;
+  cfg.gtft_p = 0.0f;
+
+  REQUIRE_THROWS_AS(run_gpu(cfg), std::overflow_error);
+}
