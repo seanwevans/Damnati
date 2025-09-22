@@ -535,11 +535,27 @@ void run_gpu(const Config &cfg) {
   const int n = cfg.n_agents;
   const int rounds = cfg.rounds;
   const uint64_t seed = cfg.seed;
+  constexpr int threads_per_block = 256;
+
+  long long total_pairs = static_cast<long long>(n) * (n - 1) / 2;
+  if (total_pairs < 0) {
+    throw std::runtime_error("Error: invalid tournament size.");
+  }
+
+  const long long max_pairs_supported =
+      static_cast<long long>(std::numeric_limits<int>::max()) *
+      static_cast<long long>(threads_per_block);
+  if (total_pairs > max_pairs_supported) {
+    throw std::runtime_error(
+        "Error: tournament requires " + std::to_string(total_pairs) +
+        " pairings, exceeding the maximum supported " +
+        std::to_string(max_pairs_supported) + " for " +
+        std::to_string(threads_per_block) + " threads per block.");
+  }
 
   std::vector<AgentParams> hparams(n);
   int n_ngram = build_population(cfg, hparams);
 
-  long long total_pairs = static_cast<long long>(n) * (n - 1) / 2;
   std::vector<std::size_t> match_offsets;
   std::size_t total_span = 0;
   if (total_pairs > 0 && n_ngram > 0) {
@@ -576,8 +592,16 @@ void run_gpu(const Config &cfg) {
         stderr,
         "Warning: not enough agents to form pairs; skipping kernel launch.\n");
   } else {
-    int threads = 256;
-    int blocks = (int)((total_pairs + threads - 1) / threads);
+    long long blocks_ll =
+        (total_pairs + threads_per_block - 1) / threads_per_block;
+    if (blocks_ll > std::numeric_limits<int>::max()) {
+      throw std::runtime_error(
+          "Error: kernel launch would require " + std::to_string(blocks_ll) +
+          " blocks, exceeding the maximum supported value of " +
+          std::to_string(std::numeric_limits<int>::max()) + ".");
+    }
+    int threads = threads_per_block;
+    int blocks = static_cast<int>(blocks_ll);
 
     play_all_pairs<<<blocks, threads>>>(d_params, n, rounds, seed,
                                         d_match_offsets, d_match_counts,
@@ -665,7 +689,12 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "%s\n", ex.what());
     return EXIT_FAILURE;
   }
-  run_gpu(cfg);
+  try {
+    run_gpu(cfg);
+  } catch (const std::exception &ex) {
+    std::fprintf(stderr, "%s\n", ex.what());
+    return EXIT_FAILURE;
+  }
   return 0;
 }
 #endif
