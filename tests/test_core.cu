@@ -209,13 +209,13 @@ TEST_CASE("GPU tournament with multiple N-gram agents is deterministic",
               match_offsets.size() * sizeof(std::size_t));
 
   AgentParams *d_params = nullptr;
-  int *d_scores = nullptr;
+  long long *d_scores = nullptr;
   CUDA_CHECK(cudaMallocManaged(&d_params, n_agents * sizeof(AgentParams)));
-  CUDA_CHECK(cudaMallocManaged(&d_scores, n_agents * sizeof(int)));
+  CUDA_CHECK(cudaMallocManaged(&d_scores, n_agents * sizeof(long long)));
   std::memcpy(d_params, agents.data(), n_agents * sizeof(AgentParams));
 
-  auto run_once = [&](std::vector<int> &out_scores) {
-    CUDA_CHECK(cudaMemset(d_scores, 0, n_agents * sizeof(int)));
+  auto run_once = [&](std::vector<long long> &out_scores) {
+    CUDA_CHECK(cudaMemset(d_scores, 0, n_agents * sizeof(long long)));
     CUDA_CHECK(cudaMemset(d_match_counts, 0, total_span * sizeof(int)));
     CUDA_CHECK(cudaMemset(d_match_q, 0, total_span * sizeof(float)));
     int threads = 64;
@@ -228,8 +228,8 @@ TEST_CASE("GPU tournament with multiple N-gram agents is deterministic",
     out_scores.assign(d_scores, d_scores + n_agents);
   };
 
-  std::vector<int> first_run;
-  std::vector<int> second_run;
+  std::vector<long long> first_run;
+  std::vector<long long> second_run;
   run_once(first_run);
   run_once(second_run);
 
@@ -272,11 +272,11 @@ TEST_CASE("GPU tournament without N-gram agents avoids auxiliary buffers",
   }
 
   AgentParams *d_params = nullptr;
-  int *d_scores = nullptr;
+  long long *d_scores = nullptr;
   CUDA_CHECK(cudaMallocManaged(&d_params, n_agents * sizeof(AgentParams)));
-  CUDA_CHECK(cudaMallocManaged(&d_scores, n_agents * sizeof(int)));
+  CUDA_CHECK(cudaMallocManaged(&d_scores, n_agents * sizeof(long long)));
   std::memcpy(d_params, agents.data(), n_agents * sizeof(AgentParams));
-  CUDA_CHECK(cudaMemset(d_scores, 0, n_agents * sizeof(int)));
+  CUDA_CHECK(cudaMemset(d_scores, 0, n_agents * sizeof(long long)));
 
   int threads = 64;
   int blocks = static_cast<int>((total_pairs + threads - 1) / threads);
@@ -285,10 +285,10 @@ TEST_CASE("GPU tournament without N-gram agents avoids auxiliary buffers",
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
 
-  std::vector<int> scores(d_scores, d_scores + n_agents);
-  for (int value : scores) {
-    REQUIRE(value >= 0);
-  }
+    std::vector<long long> scores(d_scores, d_scores + n_agents);
+    for (long long value : scores) {
+      REQUIRE(value >= 0);
+    }
 
   CUDA_CHECK(cudaFree(d_params));
   CUDA_CHECK(cudaFree(d_scores));
