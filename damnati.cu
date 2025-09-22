@@ -18,6 +18,7 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #define CUDA_CHECK(call)                                                       \
@@ -531,6 +532,26 @@ std::size_t compute_match_offsets(const std::vector<AgentParams> &hparams,
   return offset;
 }
 
+std::vector<std::pair<int, long long>>
+sorted_agent_scores(const long long *scores, int count) {
+  std::vector<std::pair<int, long long>> ranked;
+  if (count <= 0 || scores == nullptr) {
+    return ranked;
+  }
+  ranked.reserve(static_cast<std::size_t>(count));
+  for (int i = 0; i < count; ++i) {
+    ranked.emplace_back(i, scores[i]);
+  }
+  std::sort(ranked.begin(), ranked.end(),
+            [](const auto &lhs, const auto &rhs) {
+              if (lhs.second != rhs.second) {
+                return lhs.second > rhs.second;
+              }
+              return lhs.first < rhs.first;
+            });
+  return ranked;
+}
+
 void run_gpu(const Config &cfg) {
   const int n = cfg.n_agents;
   const int rounds = cfg.rounds;
@@ -641,9 +662,13 @@ void run_gpu(const Config &cfg) {
   std::printf("}}\n");
 
   int show = dmin(10, n);
-  for (int i = 0; i < show; ++i) {
-    std::printf("agent[%d]: strat=%s score=%lld\n", i, names[hparams[i].strat],
-                d_scores[i]);
+  std::vector<std::pair<int, long long>> ranked =
+      sorted_agent_scores(d_scores, n);
+  for (int r = 0; r < show && r < static_cast<int>(ranked.size()); ++r) {
+    const auto &entry = ranked[r];
+    int idx = entry.first;
+    std::printf("agent[%d]: strat=%s score=%lld\n", idx, names[hparams[idx].strat],
+                entry.second);
   }
 
   CUDA_CHECK(cudaFree(d_params));
