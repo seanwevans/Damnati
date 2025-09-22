@@ -156,6 +156,22 @@ TEST_CASE("isqrt64 computes floor square roots", "[isqrt64]") {
   }
 }
 
+TEST_CASE("sorted_agent_scores orders by score then index", "[report]") {
+  const long long scores[] = {15, 42, 42, -3, 0};
+  auto ranked = sorted_agent_scores(scores, 5);
+  REQUIRE(ranked.size() == 5);
+  REQUIRE(ranked[0].first == 1);
+  REQUIRE(ranked[0].second == 42);
+  REQUIRE(ranked[1].first == 2);
+  REQUIRE(ranked[1].second == 42);
+  REQUIRE(ranked[2].first == 0);
+  REQUIRE(ranked[2].second == 15);
+  REQUIRE(ranked[3].first == 4);
+  REQUIRE(ranked[3].second == 0);
+  REQUIRE(ranked[4].first == 3);
+  REQUIRE(ranked[4].second == -3);
+}
+
 TEST_CASE("GPU tournament with multiple N-gram agents is deterministic",
           "[gpu]") {
   const int n_agents = 6;
