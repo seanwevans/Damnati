@@ -92,3 +92,19 @@ TEST_CASE("parse_cli rejects invalid depth and unknown options", "[cli]") {
     }
   }
 }
+
+TEST_CASE("run_gpu rejects tournaments that exceed launch capacity",
+          "[cli][limits]") {
+  Config cfg;
+  cfg.n_agents = 1048577;
+  cfg.p_ngram = 0.0f;
+  cfg.rounds = 1;
+
+  try {
+    run_gpu(cfg);
+    FAIL("run_gpu should have thrown for excessive tournament size");
+  } catch (const std::runtime_error &ex) {
+    REQUIRE(std::string(ex.what()).find("exceeding the maximum supported") !=
+            std::string::npos);
+  }
+}
