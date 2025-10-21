@@ -1,4 +1,5 @@
 # Damnati
+<img width="256" alt="Warm Flame Against Red Backdrop" src="https://github.com/user-attachments/assets/a9f9aa3a-90f0-431e-8727-53fb3ab3277f" />
 
 Damnati is a CUDA-accelerated tournament simulator for the Iterated Prisoner's Dilemma (IPD). It pits a population of strategies against each other, including classical IPD strategies and optional N-gram learning agents.
 
