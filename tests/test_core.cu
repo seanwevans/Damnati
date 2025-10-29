@@ -192,6 +192,60 @@ TEST_CASE("isqrt64 computes floor square roots", "[isqrt64]") {
   }
 }
 
+TEST_CASE("pair_index_to_agents enumerates all unique pairs", "[pairs]") {
+  const int n_agents = 7;
+  const long long total_pairs =
+      static_cast<long long>(n_agents) * (n_agents - 1) / 2;
+  REQUIRE(total_pairs > 0);
+
+  std::vector<std::pair<int, int>> expected;
+  expected.reserve(static_cast<std::size_t>(total_pairs));
+  for (int i = 0; i < n_agents; ++i) {
+    for (int j = i + 1; j < n_agents; ++j) {
+      expected.emplace_back(i, j);
+    }
+  }
+  REQUIRE(expected.size() == static_cast<std::size_t>(total_pairs));
+
+  std::vector<char> seen(static_cast<std::size_t>(n_agents * n_agents), 0);
+  std::size_t seen_pairs = 0;
+
+  for (long long idx = 0; idx < total_pairs; ++idx) {
+    int i_out = -1;
+    int j_out = -1;
+    pair_index_to_agents(idx, n_agents, i_out, j_out);
+
+    INFO("idx=" << idx);
+    REQUIRE(i_out >= 0);
+    REQUIRE(j_out >= 0);
+    REQUIRE(i_out < n_agents);
+    REQUIRE(j_out < n_agents);
+    REQUIRE(i_out < j_out);
+
+    const std::pair<int, int> observed{i_out, j_out};
+    REQUIRE(observed == expected[static_cast<std::size_t>(idx)]);
+
+    std::size_t key = static_cast<std::size_t>(i_out * n_agents + j_out);
+    REQUIRE(seen[key] == 0);
+    seen[key] = 1;
+    ++seen_pairs;
+  }
+
+  REQUIRE(seen_pairs == expected.size());
+
+  int first_i = -1;
+  int first_j = -1;
+  pair_index_to_agents(0, n_agents, first_i, first_j);
+  REQUIRE(first_i == expected.front().first);
+  REQUIRE(first_j == expected.front().second);
+
+  int last_i = -1;
+  int last_j = -1;
+  pair_index_to_agents(total_pairs - 1, n_agents, last_i, last_j);
+  REQUIRE(last_i == expected.back().first);
+  REQUIRE(last_j == expected.back().second);
+}
+
 TEST_CASE("sorted_agent_scores orders by score then index", "[report]") {
   const long long scores[] = {15, 42, 42, -3, 0};
   auto ranked = sorted_agent_scores(scores, 5);
