@@ -129,6 +129,42 @@ TEST_CASE("ngram_update accumulates payoffs", "[ngram]") {
   ngram_update(p, C, C, 1);
   REQUIRE(counts[0 * 2 + C] == 2);
   REQUIRE(q[0 * 2 + C] == Approx(2.0f));
+
+  SECTION("handles maximum depth mask correctly") {
+    PlayerState max_p{};
+    max_p.depth = MAX_NGRAM_DEPTH;
+    max_p.state = 0u;
+
+    const std::size_t tracked_states = 1u << 10; // limit history states we visit
+    std::vector<int> deep_counts(tracked_states * 2, 0);
+    std::vector<float> deep_q(tracked_states * 2, 0.0f);
+    max_p.counts = deep_counts.data();
+    max_p.q = deep_q.data();
+
+    const unsigned int state_bits = static_cast<unsigned int>(sizeof(max_p.state) * 8u);
+    const unsigned int used_bits =
+        std::min<unsigned int>(static_cast<unsigned int>(max_p.depth * 2), state_bits);
+    const std::uint64_t mask64 =
+        (used_bits == 0u) ? 0ULL : ((std::uint64_t{1} << used_bits) - 1ULL);
+    const unsigned int mask = static_cast<unsigned int>(mask64);
+
+    const std::array<std::pair<int, int>, 5> history = {
+        std::make_pair(C, C), std::make_pair(D, C),
+        std::make_pair(C, D), std::make_pair(D, D),
+        std::make_pair(C, C)};
+
+    for (const auto &[my_act, opp_act] : history) {
+      REQUIRE(max_p.state < tracked_states);
+      const unsigned int prev_state = max_p.state;
+      ngram_update(max_p, my_act, opp_act, 1);
+      const unsigned int expected_state = static_cast<unsigned int>(
+          (((static_cast<std::uint64_t>(prev_state) << 2) |
+            static_cast<std::uint64_t>(encode_pair(my_act, opp_act))) &
+           mask64));
+      REQUIRE(max_p.state == expected_state);
+      REQUIRE(max_p.state <= mask);
+    }
+  }
 }
 
 TEST_CASE("isqrt64 computes floor square roots", "[isqrt64]") {

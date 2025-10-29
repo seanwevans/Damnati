@@ -170,14 +170,28 @@ ngram_choose(PlayerState &p, uint64_t seed, int i, int j, int r, int who) {
 
 __device__ __host__ __forceinline__ void ngram_update(PlayerState &p, int my,
                                                       int opp, int reward) {
-  const int mask = (p.depth == 0) ? 0 : ((1 << (2 * p.depth)) - 1);
+  const unsigned int state_bits = static_cast<unsigned int>(sizeof(p.state) * 8u);
+  const int desired_bits = (p.depth <= 0) ? 0 : 2 * p.depth;
+  const unsigned int used_bits =
+      (desired_bits <= 0)
+          ? 0u
+          : static_cast<unsigned int>(desired_bits >= static_cast<int>(state_bits)
+                                          ? state_bits
+                                          : desired_bits);
+  const std::uint64_t mask64 =
+      (used_bits == 0u) ? 0ULL : ((std::uint64_t{1} << used_bits) - 1ULL);
+  const unsigned int mask = static_cast<unsigned int>(mask64);
   const int s = (p.depth == 0) ? 0 : p.state;
   int a = my;
   int cnt = ++p.counts[s * 2 + a];
   float oldq = p.q[s * 2 + a];
   p.q[s * 2 + a] = oldq + (float(reward) - oldq) / float(cnt);
   if (p.depth > 0) {
-    unsigned int np = ((p.state << 2) | encode_pair(my, opp)) & (unsigned)mask;
+    std::uint64_t next =
+        (static_cast<std::uint64_t>(p.state) << 2) |
+        static_cast<std::uint64_t>(encode_pair(my, opp));
+    next &= mask64;
+    unsigned int np = static_cast<unsigned int>(next);
     p.state = np;
   }
 }
