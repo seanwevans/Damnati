@@ -329,32 +329,51 @@ TEST_CASE("GPU tournament with multiple N-gram agents is deterministic",
 
   int *d_match_counts = nullptr;
   float *d_match_q = nullptr;
-  CUDA_CHECK(cudaMalloc(&d_match_counts, total_span * sizeof(int)));
-  CUDA_CHECK(cudaMalloc(&d_match_q, total_span * sizeof(float)));
+  throw_if_cuda_error(cudaMalloc(&d_match_counts, total_span * sizeof(int)),
+                      "cudaMalloc(&d_match_counts, total_span * sizeof(int))",
+                      __FILE__, __LINE__);
+  throw_if_cuda_error(cudaMalloc(&d_match_q, total_span * sizeof(float)),
+                      "cudaMalloc(&d_match_q, total_span * sizeof(float))",
+                      __FILE__, __LINE__);
 
   std::size_t *d_match_offsets = nullptr;
-  CUDA_CHECK(cudaMallocManaged(&d_match_offsets,
-                               match_offsets.size() * sizeof(std::size_t)));
+  throw_if_cuda_error(
+      cudaMallocManaged(&d_match_offsets,
+                        match_offsets.size() * sizeof(std::size_t)),
+      "cudaMallocManaged(&d_match_offsets, match_offsets.size() * sizeof(std::size_t))",
+      __FILE__, __LINE__);
   std::memcpy(d_match_offsets, match_offsets.data(),
               match_offsets.size() * sizeof(std::size_t));
 
   AgentParams *d_params = nullptr;
   long long *d_scores = nullptr;
-  CUDA_CHECK(cudaMallocManaged(&d_params, n_agents * sizeof(AgentParams)));
-  CUDA_CHECK(cudaMallocManaged(&d_scores, n_agents * sizeof(long long)));
+  throw_if_cuda_error(cudaMallocManaged(&d_params, n_agents * sizeof(AgentParams)),
+                      "cudaMallocManaged(&d_params, n_agents * sizeof(AgentParams))",
+                      __FILE__, __LINE__);
+  throw_if_cuda_error(cudaMallocManaged(&d_scores, n_agents * sizeof(long long)),
+                      "cudaMallocManaged(&d_scores, n_agents * sizeof(long long))",
+                      __FILE__, __LINE__);
   std::memcpy(d_params, agents.data(), n_agents * sizeof(AgentParams));
 
   auto run_once = [&](std::vector<long long> &out_scores) {
-    CUDA_CHECK(cudaMemset(d_scores, 0, n_agents * sizeof(long long)));
-    CUDA_CHECK(cudaMemset(d_match_counts, 0, total_span * sizeof(int)));
-    CUDA_CHECK(cudaMemset(d_match_q, 0, total_span * sizeof(float)));
+    throw_if_cuda_error(cudaMemset(d_scores, 0, n_agents * sizeof(long long)),
+                        "cudaMemset(d_scores, 0, n_agents * sizeof(long long))",
+                        __FILE__, __LINE__);
+    throw_if_cuda_error(cudaMemset(d_match_counts, 0, total_span * sizeof(int)),
+                        "cudaMemset(d_match_counts, 0, total_span * sizeof(int))",
+                        __FILE__, __LINE__);
+    throw_if_cuda_error(cudaMemset(d_match_q, 0, total_span * sizeof(float)),
+                        "cudaMemset(d_match_q, 0, total_span * sizeof(float))",
+                        __FILE__, __LINE__);
     int threads = 64;
     int blocks = static_cast<int>((total_pairs + threads - 1) / threads);
     play_all_pairs<<<blocks, threads>>>(d_params, n_agents, rounds, seed,
                                         d_match_offsets, d_match_counts,
                                         d_match_q, d_scores);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
+    throw_if_cuda_error(cudaGetLastError(), "cudaGetLastError()", __FILE__,
+                        __LINE__);
+    throw_if_cuda_error(cudaDeviceSynchronize(), "cudaDeviceSynchronize()",
+                        __FILE__, __LINE__);
     out_scores.assign(d_scores, d_scores + n_agents);
   };
 
@@ -365,11 +384,16 @@ TEST_CASE("GPU tournament with multiple N-gram agents is deterministic",
 
   REQUIRE(first_run == second_run);
 
-  CUDA_CHECK(cudaFree(d_match_counts));
-  CUDA_CHECK(cudaFree(d_match_q));
-  CUDA_CHECK(cudaFree(d_match_offsets));
-  CUDA_CHECK(cudaFree(d_params));
-  CUDA_CHECK(cudaFree(d_scores));
+  throw_if_cuda_error(cudaFree(d_match_counts), "cudaFree(d_match_counts)",
+                      __FILE__, __LINE__);
+  throw_if_cuda_error(cudaFree(d_match_q), "cudaFree(d_match_q)", __FILE__,
+                      __LINE__);
+  throw_if_cuda_error(cudaFree(d_match_offsets), "cudaFree(d_match_offsets)",
+                      __FILE__, __LINE__);
+  throw_if_cuda_error(cudaFree(d_params), "cudaFree(d_params)", __FILE__,
+                      __LINE__);
+  throw_if_cuda_error(cudaFree(d_scores), "cudaFree(d_scores)", __FILE__,
+                      __LINE__);
 }
 
 TEST_CASE("GPU tournament without N-gram agents avoids auxiliary buffers",
@@ -407,25 +431,35 @@ TEST_CASE("GPU tournament without N-gram agents avoids auxiliary buffers",
 
   AgentParams *d_params = nullptr;
   long long *d_scores = nullptr;
-  CUDA_CHECK(cudaMallocManaged(&d_params, n_agents * sizeof(AgentParams)));
-  CUDA_CHECK(cudaMallocManaged(&d_scores, n_agents * sizeof(long long)));
+  throw_if_cuda_error(cudaMallocManaged(&d_params, n_agents * sizeof(AgentParams)),
+                      "cudaMallocManaged(&d_params, n_agents * sizeof(AgentParams))",
+                      __FILE__, __LINE__);
+  throw_if_cuda_error(cudaMallocManaged(&d_scores, n_agents * sizeof(long long)),
+                      "cudaMallocManaged(&d_scores, n_agents * sizeof(long long))",
+                      __FILE__, __LINE__);
   std::memcpy(d_params, agents.data(), n_agents * sizeof(AgentParams));
-  CUDA_CHECK(cudaMemset(d_scores, 0, n_agents * sizeof(long long)));
+  throw_if_cuda_error(cudaMemset(d_scores, 0, n_agents * sizeof(long long)),
+                      "cudaMemset(d_scores, 0, n_agents * sizeof(long long))",
+                      __FILE__, __LINE__);
 
   int threads = 64;
   int blocks = static_cast<int>((total_pairs + threads - 1) / threads);
   play_all_pairs<<<blocks, threads>>>(d_params, n_agents, rounds, seed, nullptr,
                                       nullptr, nullptr, d_scores);
-  CUDA_CHECK(cudaGetLastError());
-  CUDA_CHECK(cudaDeviceSynchronize());
+  throw_if_cuda_error(cudaGetLastError(), "cudaGetLastError()", __FILE__,
+                      __LINE__);
+  throw_if_cuda_error(cudaDeviceSynchronize(), "cudaDeviceSynchronize()",
+                      __FILE__, __LINE__);
 
   std::vector<long long> scores(d_scores, d_scores + n_agents);
   for (long long value : scores) {
     REQUIRE(value >= 0);
   }
 
-  CUDA_CHECK(cudaFree(d_params));
-  CUDA_CHECK(cudaFree(d_scores));
+  throw_if_cuda_error(cudaFree(d_params), "cudaFree(d_params)", __FILE__,
+                      __LINE__);
+  throw_if_cuda_error(cudaFree(d_scores), "cudaFree(d_scores)", __FILE__,
+                      __LINE__);
 }
 
 TEST_CASE("compute_match_offsets detects span overflow", "[overflow]") {
@@ -440,6 +474,14 @@ TEST_CASE("compute_match_offsets detects span overflow", "[overflow]") {
   std::vector<std::size_t> match_offsets;
   REQUIRE_THROWS_AS(compute_match_offsets(agents, match_offsets),
                     std::overflow_error);
+}
+
+TEST_CASE("throw_if_cuda_error throws runtime_error on failure", "[cuda][error]") {
+  REQUIRE_NOTHROW(throw_if_cuda_error(cudaSuccess, "cudaSuccess", __FILE__,
+                                     __LINE__));
+  REQUIRE_THROWS_AS(throw_if_cuda_error(cudaErrorInvalidValue,
+                                        "cudaErrorInvalidValue", __FILE__,
+                                        __LINE__), std::runtime_error);
 }
 
 TEST_CASE("run_gpu guards against oversized allocations", "[overflow][gpu]") {

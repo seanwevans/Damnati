@@ -21,15 +21,21 @@
 #include <utility>
 #include <vector>
 
-#define CUDA_CHECK(call)                                                       \
-  do {                                                                         \
-    cudaError_t err = call;                                                    \
-    if (err != cudaSuccess) {                                                  \
-      std::fprintf(stderr, "CUDA error at %s:%d: %s\n", __FILE__, __LINE__,    \
-                   cudaGetErrorString(err));                                   \
-      std::exit(EXIT_FAILURE);                                                 \
-    }                                                                          \
-  } while (0)
+inline void throw_if_cuda_error(cudaError_t err, const char *expr,
+                                const char *file, int line) {
+  if (err == cudaSuccess) {
+    return;
+  }
+  std::string message = "CUDA error at ";
+  message += file;
+  message += ':';
+  message += std::to_string(line);
+  message += " for ";
+  message += expr;
+  message += ": ";
+  message += cudaGetErrorString(err);
+  throw std::runtime_error(message);
+}
 
 // Payoffs
 constexpr int Rw = 3; // (C,C)
@@ -660,23 +666,36 @@ void run_gpu(const Config &cfg) {
     }
     std::size_t counts_bytes = total_span * sizeof(int);
     std::size_t q_bytes = total_span * sizeof(float);
-    CUDA_CHECK(cudaMalloc(&d_match_counts, counts_bytes));
-    CUDA_CHECK(cudaMalloc(&d_match_q, q_bytes));
-    CUDA_CHECK(cudaMemset(d_match_counts, 0, counts_bytes));
-    CUDA_CHECK(cudaMemset(d_match_q, 0, q_bytes));
+    throw_if_cuda_error(cudaMalloc(&d_match_counts, counts_bytes),
+                        "cudaMalloc(&d_match_counts, counts_bytes)", __FILE__,
+                        __LINE__);
+    throw_if_cuda_error(cudaMalloc(&d_match_q, q_bytes),
+                        "cudaMalloc(&d_match_q, q_bytes)", __FILE__, __LINE__);
+    throw_if_cuda_error(cudaMemset(d_match_counts, 0, counts_bytes),
+                        "cudaMemset(d_match_counts, 0, counts_bytes)",
+                        __FILE__, __LINE__);
+    throw_if_cuda_error(cudaMemset(d_match_q, 0, q_bytes),
+                        "cudaMemset(d_match_q, 0, q_bytes)", __FILE__,
+                        __LINE__);
   }
 
   std::size_t *d_match_offsets = nullptr;
   if (!match_offsets.empty()) {
     std::size_t offsets_bytes = match_offsets.size() * sizeof(std::size_t);
-    CUDA_CHECK(cudaMallocManaged(&d_match_offsets, offsets_bytes));
+    throw_if_cuda_error(cudaMallocManaged(&d_match_offsets, offsets_bytes),
+                        "cudaMallocManaged(&d_match_offsets, offsets_bytes)",
+                        __FILE__, __LINE__);
     std::memcpy(d_match_offsets, match_offsets.data(), offsets_bytes);
   }
 
   AgentParams *d_params = nullptr;
   long long *d_scores = nullptr;
-  CUDA_CHECK(cudaMallocManaged(&d_params, n * sizeof(AgentParams)));
-  CUDA_CHECK(cudaMallocManaged(&d_scores, n * sizeof(long long)));
+  throw_if_cuda_error(cudaMallocManaged(&d_params, n * sizeof(AgentParams)),
+                      "cudaMallocManaged(&d_params, n * sizeof(AgentParams))",
+                      __FILE__, __LINE__);
+  throw_if_cuda_error(cudaMallocManaged(&d_scores, n * sizeof(long long)),
+                      "cudaMallocManaged(&d_scores, n * sizeof(long long))",
+                      __FILE__, __LINE__);
   std::memcpy(d_params, hparams.data(), n * sizeof(AgentParams));
   std::memset(d_scores, 0, n * sizeof(long long));
 
@@ -699,8 +718,10 @@ void run_gpu(const Config &cfg) {
     play_all_pairs<<<blocks, threads>>>(d_params, n, rounds, seed,
                                         d_match_offsets, d_match_counts,
                                         d_match_q, d_scores);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
+    throw_if_cuda_error(cudaGetLastError(), "cudaGetLastError()", __FILE__,
+                        __LINE__);
+    throw_if_cuda_error(cudaDeviceSynchronize(), "cudaDeviceSynchronize()",
+                        __FILE__, __LINE__);
   }
 
   long long total = 0;
@@ -766,14 +787,19 @@ void run_gpu(const Config &cfg) {
                 names[hparams[idx].strat], entry.second);
   }
 
-  CUDA_CHECK(cudaFree(d_params));
-  CUDA_CHECK(cudaFree(d_scores));
+  throw_if_cuda_error(cudaFree(d_params), "cudaFree(d_params)", __FILE__,
+                      __LINE__);
+  throw_if_cuda_error(cudaFree(d_scores), "cudaFree(d_scores)", __FILE__,
+                      __LINE__);
   if (d_match_offsets)
-    CUDA_CHECK(cudaFree(d_match_offsets));
+    throw_if_cuda_error(cudaFree(d_match_offsets), "cudaFree(d_match_offsets)",
+                        __FILE__, __LINE__);
   if (d_match_counts)
-    CUDA_CHECK(cudaFree(d_match_counts));
+    throw_if_cuda_error(cudaFree(d_match_counts),
+                        "cudaFree(d_match_counts)", __FILE__, __LINE__);
   if (d_match_q)
-    CUDA_CHECK(cudaFree(d_match_q));
+    throw_if_cuda_error(cudaFree(d_match_q), "cudaFree(d_match_q)", __FILE__,
+                        __LINE__);
 }
 
 #ifndef DAMNATI_NO_MAIN
