@@ -108,3 +108,12 @@ TEST_CASE("run_gpu rejects tournaments that exceed launch capacity",
             std::string::npos);
   }
 }
+
+TEST_CASE("summary header prints gtft probability", "[cli][summary]") {
+  std::array<char, 256> buffer{};
+  int written = std::snprintf(buffer.data(), buffer.size(), kSummaryHeaderFmt,
+                              4, 10, 0.5f, 2, 0.1f, 0.25f);
+  REQUIRE(written > 0);
+  std::string header(buffer.data(), static_cast<std::size_t>(written));
+  REQUIRE(header.find("\"gtft\":0.250") != std::string::npos);
+}
