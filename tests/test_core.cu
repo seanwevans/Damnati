@@ -4,6 +4,26 @@
 #define DAMNATI_NO_MAIN
 #include "../damnati.cu"
 
+namespace {
+
+bool ensure_cuda_device_available() {
+  int device_count = 0;
+  cudaError_t err = cudaGetDeviceCount(&device_count);
+  if (err == cudaErrorNoDevice || device_count == 0) {
+    INFO("No CUDA devices detected; skipping GPU test");
+    SUCCEED("No CUDA devices detected; skipping GPU test");
+    return false;
+  }
+  if (err != cudaSuccess) {
+    INFO("cudaGetDeviceCount failed: " << cudaGetErrorString(err));
+    SUCCEED("cudaGetDeviceCount failed; skipping GPU test");
+    return false;
+  }
+  return true;
+}
+
+} // namespace
+
 TEST_CASE("choose_action outputs expected moves", "[choose]") {
   uint64_t seed = 0ULL;
   PlayerState p{};
@@ -264,6 +284,10 @@ TEST_CASE("sorted_agent_scores orders by score then index", "[report]") {
 
 TEST_CASE("GPU tournament with multiple N-gram agents is deterministic",
           "[gpu]") {
+  if (!ensure_cuda_device_available()) {
+    return;
+  }
+
   const int n_agents = 6;
   const int rounds = 20;
   const uint64_t seed = 424242ULL;
@@ -350,6 +374,10 @@ TEST_CASE("GPU tournament with multiple N-gram agents is deterministic",
 
 TEST_CASE("GPU tournament without N-gram agents avoids auxiliary buffers",
           "[gpu][no_ngram]") {
+  if (!ensure_cuda_device_available()) {
+    return;
+  }
+
   const int n_agents = 4;
   const int rounds = 10;
   const uint64_t seed = 1337ULL;
@@ -415,6 +443,10 @@ TEST_CASE("compute_match_offsets detects span overflow", "[overflow]") {
 }
 
 TEST_CASE("run_gpu guards against oversized allocations", "[overflow][gpu]") {
+  if (!ensure_cuda_device_available()) {
+    return;
+  }
+
   Config cfg;
   cfg.n_agents = 2;
   cfg.rounds = 1;
