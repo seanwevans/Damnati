@@ -597,6 +597,10 @@ sorted_agent_scores(const long long *scores, int count) {
   return ranked;
 }
 
+constexpr const char kSummaryHeaderFmt[] =
+    "{\"agents\":%d,\"rounds\":%d,\"p_ngram\":%.3f,\"depth\":%d,"
+    "\"epsilon\":%.3f,\"gtft\":%.3f,\n";
+
 void run_gpu(const Config &cfg) {
   const int n = cfg.n_agents;
   const int rounds = cfg.rounds;
@@ -704,9 +708,8 @@ void run_gpu(const Config &cfg) {
   long double variance = varacc / static_cast<long double>(n > 1 ? (n - 1) : 1);
   double stdev = std::sqrt(static_cast<double>(variance));
 
-  std::printf("{\"agents\":%d,\"rounds\":%d,\"p_ngram\":%.3f,\"depth\":%d,"
-              "\"epsilon\":%.3f,\n",
-              n, rounds, cfg.p_ngram, cfg.depth, cfg.epsilon);
+  std::printf(kSummaryHeaderFmt, n, rounds, cfg.p_ngram, cfg.depth,
+              cfg.epsilon, cfg.gtft_p);
   std::printf(" \"avg_score\":%.3f,\"min\":%lld,\"max\":%lld,\"stdev\":%.3f,\n",
               static_cast<double>(mean), minv, maxv, stdev);
 

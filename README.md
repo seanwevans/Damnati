@@ -45,7 +45,15 @@ non-zero status, so double-check flag names.
 
 ## Output
 
-The simulator prints summary statistics in JSON format, including average score, minimum and maximum scores, standard deviation, and per-strategy results. The top few agents and their scores are also listed.
+The simulator prints summary statistics in JSON format, including average score, minimum and maximum scores, standard deviation, and per-strategy results. The configuration header now reports the probability used by **Generous Tit for Tat** as `"gtft"`. For example:
+
+```json
+{"agents":256,"rounds":200,"p_ngram":0.600,"depth":3,"epsilon":0.100,"gtft":0.100,
+ "avg_score":1.234, "min":-10, "max":15, "stdev":2.468,
+ "by_strategy":{...}}
+```
+
+The top few agents and their scores are also listed.
 
 ## Testing
 
