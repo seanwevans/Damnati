@@ -1,14 +1,3 @@
-// damnati.cu — CUDA-accelerated Iterated Prisoner's Dilemma (IPD) tournament
-// Build: nvcc -O3 -arch=sm_86 damnati.cu -o damnati
-// Run:   ./damnati --agents 512 --rounds 200 --seed 42 --p-ngram 0.6
-
-#include <algorithm>
-#include <array>
-#include <cassert>
-#include <cerrno>
-#include <cmath>
-#include <cstddef>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>

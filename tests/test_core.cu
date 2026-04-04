@@ -2,8 +2,11 @@
 #include "catch.hpp"
 #include <type_traits>
 
-#define DAMNATI_NO_MAIN
-#include "../damnati.cu"
+#include "../src/cli.cu"
+#include "../src/strategy.cu"
+#include "../src/kernel.cu"
+#include "../src/reporting.cu"
+#include "../src/app.cu"
 
 namespace {
 
