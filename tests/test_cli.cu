@@ -5,9 +5,8 @@
 #include "../damnati.cu"
 
 TEST_CASE("parse_cli rejects invalid depth and unknown options", "[cli]") {
-  Config cfg;
-
   {
+    Config cfg{};
     char prog[] = "damnati";
     char depth[] = "--depth";
     char neg[] = "-1";
@@ -25,6 +24,7 @@ TEST_CASE("parse_cli rejects invalid depth and unknown options", "[cli]") {
   }
 
   {
+    Config cfg{};
     char prog[] = "damnati";
     char agents[] = "--agents";
     char one[] = "1";
@@ -39,6 +39,7 @@ TEST_CASE("parse_cli rejects invalid depth and unknown options", "[cli]") {
   }
 
   {
+    Config cfg{};
     char prog[] = "damnati";
     char agents[] = "--agents";
     char rounds[] = "--rounds";
@@ -54,7 +55,7 @@ TEST_CASE("parse_cli rejects invalid depth and unknown options", "[cli]") {
   }
 
   {
-    cfg = Config{};
+    Config cfg{};
     char prog[] = "damnati";
     char rounds[] = "--rounds";
     char big[] = "2000000000";
@@ -65,6 +66,7 @@ TEST_CASE("parse_cli rejects invalid depth and unknown options", "[cli]") {
   }
 
   {
+    Config cfg{};
     char prog[] = "damnati";
     char unknown[] = "--unknown";
     char *argv[] = {prog, unknown, nullptr};
@@ -79,6 +81,7 @@ TEST_CASE("parse_cli rejects invalid depth and unknown options", "[cli]") {
   }
 
   {
+    Config cfg{};
     char prog[] = "damnati";
     char token[] = "extra";
     char *argv[] = {prog, token, nullptr};
@@ -89,6 +92,210 @@ TEST_CASE("parse_cli rejects invalid depth and unknown options", "[cli]") {
     } catch (const std::runtime_error &ex) {
       REQUIRE(std::string(ex.what()) ==
               "Error: unexpected positional argument 'extra'.");
+    }
+  }
+}
+
+TEST_CASE("parse_cli validates boundary values for depth and probabilities",
+          "[cli]") {
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char depth[] = "--depth";
+    char zero[] = "0";
+    char *argv[] = {prog, depth, zero, nullptr};
+    int argc = 3;
+    REQUIRE_NOTHROW(parse_cli(argc, argv, cfg));
+    REQUIRE(cfg.depth == 0);
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char depth[] = "--depth";
+    char max_depth[] = "15";
+    char *argv[] = {prog, depth, max_depth, nullptr};
+    int argc = 3;
+    REQUIRE_NOTHROW(parse_cli(argc, argv, cfg));
+    REQUIRE(cfg.depth == MAX_NGRAM_DEPTH);
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char depth[] = "--depth";
+    char too_large[] = "16";
+    char *argv[] = {prog, depth, too_large, nullptr};
+    int argc = 3;
+    try {
+      parse_cli(argc, argv, cfg);
+      FAIL("parse_cli should have thrown for depth above max");
+    } catch (const std::runtime_error &ex) {
+      REQUIRE(std::string(ex.what()) ==
+              "Error: --depth must be in [0,15].");
+    }
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char epsilon[] = "--epsilon";
+    char zero[] = "0";
+    char *argv[] = {prog, epsilon, zero, nullptr};
+    int argc = 3;
+    REQUIRE_NOTHROW(parse_cli(argc, argv, cfg));
+    REQUIRE(cfg.epsilon == Approx(0.0f));
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char epsilon[] = "--epsilon";
+    char one[] = "1";
+    char *argv[] = {prog, epsilon, one, nullptr};
+    int argc = 3;
+    REQUIRE_NOTHROW(parse_cli(argc, argv, cfg));
+    REQUIRE(cfg.epsilon == Approx(1.0f));
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char epsilon[] = "--epsilon";
+    char below[] = "-0.01";
+    char *argv[] = {prog, epsilon, below, nullptr};
+    int argc = 3;
+    REQUIRE_THROWS_WITH(parse_cli(argc, argv, cfg),
+                        "Error: --epsilon must be in [0,1].");
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char epsilon[] = "--epsilon";
+    char above[] = "1.01";
+    char *argv[] = {prog, epsilon, above, nullptr};
+    int argc = 3;
+    REQUIRE_THROWS_WITH(parse_cli(argc, argv, cfg),
+                        "Error: --epsilon must be in [0,1].");
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char pngram[] = "--p-ngram";
+    char zero[] = "0";
+    char *argv[] = {prog, pngram, zero, nullptr};
+    int argc = 3;
+    REQUIRE_NOTHROW(parse_cli(argc, argv, cfg));
+    REQUIRE(cfg.p_ngram == Approx(0.0f));
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char pngram[] = "--p-ngram";
+    char one[] = "1";
+    char *argv[] = {prog, pngram, one, nullptr};
+    int argc = 3;
+    REQUIRE_NOTHROW(parse_cli(argc, argv, cfg));
+    REQUIRE(cfg.p_ngram == Approx(1.0f));
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char pngram[] = "--p-ngram";
+    char below[] = "-0.01";
+    char *argv[] = {prog, pngram, below, nullptr};
+    int argc = 3;
+    REQUIRE_THROWS_WITH(parse_cli(argc, argv, cfg),
+                        "Error: --p-ngram must be in [0,1].");
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char pngram[] = "--p-ngram";
+    char above[] = "1.01";
+    char *argv[] = {prog, pngram, above, nullptr};
+    int argc = 3;
+    REQUIRE_THROWS_WITH(parse_cli(argc, argv, cfg),
+                        "Error: --p-ngram must be in [0,1].");
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char gtft[] = "--gtft";
+    char zero[] = "0";
+    char *argv[] = {prog, gtft, zero, nullptr};
+    int argc = 3;
+    REQUIRE_NOTHROW(parse_cli(argc, argv, cfg));
+    REQUIRE(cfg.gtft_p == Approx(0.0f));
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char gtft[] = "--gtft";
+    char one[] = "1";
+    char *argv[] = {prog, gtft, one, nullptr};
+    int argc = 3;
+    REQUIRE_NOTHROW(parse_cli(argc, argv, cfg));
+    REQUIRE(cfg.gtft_p == Approx(1.0f));
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char gtft[] = "--gtft";
+    char below[] = "-0.01";
+    char *argv[] = {prog, gtft, below, nullptr};
+    int argc = 3;
+    REQUIRE_THROWS_WITH(parse_cli(argc, argv, cfg),
+                        "Error: --gtft must be in [0,1].");
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char gtft[] = "--gtft";
+    char above[] = "1.01";
+    char *argv[] = {prog, gtft, above, nullptr};
+    int argc = 3;
+    REQUIRE_THROWS_WITH(parse_cli(argc, argv, cfg),
+                        "Error: --gtft must be in [0,1].");
+  }
+}
+
+TEST_CASE("parse_cli validates seed parsing failures", "[cli]") {
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char seed[] = "--seed";
+    char overflow[] = "18446744073709551616";
+    char *argv[] = {prog, seed, overflow, nullptr};
+    int argc = 3;
+    REQUIRE_THROWS_WITH(parse_cli(argc, argv, cfg),
+                        "Error: value for --seed is out of range: "
+                        "'18446744073709551616'.");
+  }
+
+  {
+    Config cfg{};
+    char prog[] = "damnati";
+    char seed[] = "--seed";
+    char invalid[] = "123abc";
+    char *argv[] = {prog, seed, invalid, nullptr};
+    int argc = 3;
+    try {
+      parse_cli(argc, argv, cfg);
+      FAIL("parse_cli should have thrown for invalid seed token");
+    } catch (const std::runtime_error &ex) {
+      REQUIRE(std::string(ex.what()).find("invalid value for --seed") !=
+              std::string::npos);
+      REQUIRE(std::string(ex.what()).find("123abc") != std::string::npos);
     }
   }
 }
