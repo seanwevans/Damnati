@@ -109,6 +109,66 @@ TEST_CASE("run_gpu rejects tournaments that exceed launch capacity",
   }
 }
 
+namespace {
+cudaError_t mock_device_count_no_device(int *device_count) {
+  *device_count = 0;
+  return cudaSuccess;
+}
+
+cudaError_t mock_device_count_one_device(int *device_count) {
+  *device_count = 1;
+  return cudaSuccess;
+}
+
+cudaError_t mock_device_props_unsupported(cudaDeviceProp *props, int device) {
+  (void)device;
+  std::memset(props, 0, sizeof(cudaDeviceProp));
+  std::strncpy(props->name, "Mock GPU", sizeof(props->name) - 1);
+  props->major = 5;
+  props->minor = 2;
+  return cudaSuccess;
+}
+} // namespace
+
+TEST_CASE("runtime compatibility messages include device details",
+          "[cli][compat]") {
+  const CudaDeviceQueryApi original = g_cuda_device_query_api;
+
+  SECTION("no CUDA devices present") {
+    g_cuda_device_query_api.get_device_count = mock_device_count_no_device;
+    g_cuda_device_query_api.get_device_properties =
+        mock_device_props_unsupported;
+
+    try {
+      ensure_runtime_compatibility();
+      FAIL("ensure_runtime_compatibility should fail when no devices exist");
+    } catch (const std::runtime_error &ex) {
+      REQUIRE(std::string(ex.what()) ==
+              "Error: no CUDA device detected. Install an NVIDIA driver/CUDA "
+              "runtime and run on a GPU system.");
+    }
+  }
+
+  SECTION("selected CUDA device is unsupported") {
+    g_cuda_device_query_api.get_device_count = mock_device_count_one_device;
+    g_cuda_device_query_api.get_device_properties =
+        mock_device_props_unsupported;
+
+    try {
+      ensure_runtime_compatibility();
+      FAIL("ensure_runtime_compatibility should fail for unsupported devices");
+    } catch (const std::runtime_error &ex) {
+      const std::string message = ex.what();
+      REQUIRE(message.find("selected CUDA device Mock GPU (compute capability "
+                           "5.2) is unsupported") != std::string::npos);
+      REQUIRE(message.find("requires compute capability 6.0 or newer") !=
+              std::string::npos);
+    }
+  }
+
+  g_cuda_device_query_api = original;
+}
+
 TEST_CASE("summary header prints gtft probability", "[cli][summary]") {
   std::array<char, 256> buffer{};
   int written = std::snprintf(buffer.data(), buffer.size(), kSummaryHeaderFmt,
