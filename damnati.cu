@@ -244,6 +244,28 @@ choose_action(PlayerState &p, uint64_t seed, int i, int j, int r, int who) {
   }
 }
 
+__device__ __forceinline__ void
+block_map_accumulate(int key, long long value, int *keys,
+                     unsigned long long *values, long long *global_scores) {
+  constexpr int kBlockMapCapacity = 1024; // power of two
+  static_assert((kBlockMapCapacity & (kBlockMapCapacity - 1)) == 0,
+                "kBlockMapCapacity must be a power of two");
+  unsigned int slot = (static_cast<unsigned int>(key) * 2654435761u) &
+                      (kBlockMapCapacity - 1);
+  for (int probe = 0; probe < kBlockMapCapacity; ++probe) {
+    int prev = atomicCAS(&keys[slot], -1, key);
+    if (prev == -1 || prev == key) {
+      atomicAdd(&values[slot], static_cast<unsigned long long>(value));
+      return;
+    }
+    slot = (slot + 1) & (kBlockMapCapacity - 1);
+  }
+  atomicAdd(&global_scores[key], value);
+}
+
+// Tradeoff: block-local hash aggregation adds a small shared-memory/probing
+// overhead, but it substantially reduces global score atomics for hot agents
+// without requiring a separate full reduction kernel/pass.
 __global__ void play_all_pairs(const AgentParams *__restrict__ params,
                                int n_agents, int rounds, uint64_t seed,
                                const std::size_t *__restrict__ match_offsets,
@@ -252,76 +274,109 @@ __global__ void play_all_pairs(const AgentParams *__restrict__ params,
                                long long *__restrict__ scores) {
   long long idx = blockIdx.x * blockDim.x + threadIdx.x;
   long long total = (long long)n_agents * (n_agents - 1) / 2;
-  if (idx >= total)
-    return;
+  bool active = idx < total;
 
   int i = 0;
   int j = 0;
-  pair_index_to_agents(idx, n_agents, i, j);
-
-  AgentParams Ai = params[i];
-  AgentParams Bj = params[j];
-
-  PlayerState A;
-  A.strat = Ai.strat;
-  A.gtft_forget = Ai.gtft_forget;
-  PlayerState B;
-  B.strat = Bj.strat;
-  B.gtft_forget = Bj.gtft_forget;
-
-  constexpr std::size_t invalid = INVALID_OFFSET;
-  if (A.strat == NGRAM) {
-    assert(match_offsets && match_counts && match_q);
-    if (!(match_offsets && match_counts && match_q))
-      return;
-    std::size_t offset = match_offsets[idx * 2 + 0];
-    assert(offset != invalid);
-    if (offset == invalid)
-      return;
-    A.init_ngram(Ai.depth, Ai.epsilon, match_counts + offset, match_q + offset);
-  }
-  if (B.strat == NGRAM) {
-    assert(match_offsets && match_counts && match_q);
-    if (!(match_offsets && match_counts && match_q))
-      return;
-    std::size_t offset = match_offsets[idx * 2 + 1];
-    assert(offset != invalid);
-    if (offset == invalid)
-      return;
-    B.init_ngram(Bj.depth, Bj.epsilon, match_counts + offset, match_q + offset);
-  }
-
   long long scoreA = 0;
   long long scoreB = 0;
 
+  if (active) {
+    pair_index_to_agents(idx, n_agents, i, j);
+
+    AgentParams Ai = params[i];
+    AgentParams Bj = params[j];
+
+    PlayerState A;
+    A.strat = Ai.strat;
+    A.gtft_forget = Ai.gtft_forget;
+    PlayerState B;
+    B.strat = Bj.strat;
+    B.gtft_forget = Bj.gtft_forget;
+
+    constexpr std::size_t invalid = INVALID_OFFSET;
+    if (A.strat == NGRAM) {
+      assert(match_offsets && match_counts && match_q);
+      if (!(match_offsets && match_counts && match_q)) {
+        active = false;
+      } else {
+        std::size_t offset = match_offsets[idx * 2 + 0];
+        assert(offset != invalid);
+        if (offset == invalid) {
+          active = false;
+        } else {
+          A.init_ngram(Ai.depth, Ai.epsilon, match_counts + offset,
+                       match_q + offset);
+        }
+      }
+    }
+    if (active && B.strat == NGRAM) {
+      assert(match_offsets && match_counts && match_q);
+      if (!(match_offsets && match_counts && match_q)) {
+        active = false;
+      } else {
+        std::size_t offset = match_offsets[idx * 2 + 1];
+        assert(offset != invalid);
+        if (offset == invalid) {
+          active = false;
+        } else {
+          B.init_ngram(Bj.depth, Bj.epsilon, match_counts + offset,
+                       match_q + offset);
+        }
+      }
+    }
+
+    if (active) {
 #pragma unroll 1
-  for (int r = 0; r < rounds; ++r) {
-    int a = choose_action(A, seed, i, j, r, 0);
-    int b = choose_action(B, seed, i, j, r, 1);
+      for (int r = 0; r < rounds; ++r) {
+        int a = choose_action(A, seed, i, j, r, 0);
+        int b = choose_action(B, seed, i, j, r, 1);
 
-    int code = (a << 1) | b;
-    int pa = d_payA[code];
-    int pb = d_payB[code];
-    scoreA += pa;
-    scoreB += pb;
+        int code = (a << 1) | b;
+        int pa = d_payA[code];
+        int pb = d_payB[code];
+        scoreA += pa;
+        scoreB += pb;
 
-    if (A.strat == NGRAM)
-      ngram_update(A, a, b, pa);
-    if (B.strat == NGRAM)
-      ngram_update(B, b, a, pb);
+        if (A.strat == NGRAM)
+          ngram_update(A, a, b, pa);
+        if (B.strat == NGRAM)
+          ngram_update(B, b, a, pb);
 
-    A.opp_last = b;
-    B.opp_last = a;
-    A.last = a;
-    B.last = b;
-    if (b == D)
-      ++A.defect_seen;
-    if (a == D)
-      ++B.defect_seen;
+        A.opp_last = b;
+        B.opp_last = a;
+        A.last = a;
+        B.last = b;
+        if (b == D)
+          ++A.defect_seen;
+        if (a == D)
+          ++B.defect_seen;
+      }
+    }
   }
 
-  atomicAdd(&scores[i], scoreA);
-  atomicAdd(&scores[j], scoreB);
+  constexpr int kBlockMapCapacity = 1024;
+  __shared__ int block_keys[kBlockMapCapacity];
+  __shared__ unsigned long long block_values[kBlockMapCapacity];
+
+  for (int slot = threadIdx.x; slot < kBlockMapCapacity; slot += blockDim.x) {
+    block_keys[slot] = -1;
+    block_values[slot] = 0ULL;
+  }
+  __syncthreads();
+
+  if (active) {
+    block_map_accumulate(i, scoreA, block_keys, block_values, scores);
+    block_map_accumulate(j, scoreB, block_keys, block_values, scores);
+  }
+  __syncthreads();
+
+  for (int slot = threadIdx.x; slot < kBlockMapCapacity; slot += blockDim.x) {
+    int agent = block_keys[slot];
+    if (agent >= 0) {
+      atomicAdd(&scores[agent], static_cast<long long>(block_values[slot]));
+    }
+  }
 }
 
 constexpr int MAX_NGRAM_DEPTH = 15;
