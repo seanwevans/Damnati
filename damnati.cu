@@ -117,6 +117,71 @@ struct AgentParams {
   float *q;          // Pointer into preallocated Q-value buffer
 };
 
+struct CudaApi {
+  cudaError_t (*malloc_fn)(void **, std::size_t) = cudaMalloc;
+  cudaError_t (*malloc_managed_fn)(void **, std::size_t) = cudaMallocManaged;
+  cudaError_t (*memset_fn)(void *, int, std::size_t) = cudaMemset;
+  cudaError_t (*free_fn)(void *) = cudaFree;
+  cudaError_t (*get_last_error_fn)() = cudaGetLastError;
+  cudaError_t (*device_synchronize_fn)() = cudaDeviceSynchronize;
+};
+
+inline CudaApi &cuda_api() {
+  static CudaApi api{};
+  return api;
+}
+
+inline void set_cuda_api_for_testing(const CudaApi &api) { cuda_api() = api; }
+inline void reset_cuda_api_for_testing() { cuda_api() = CudaApi{}; }
+
+inline cudaError_t cuda_malloc(void **ptr, std::size_t size) {
+  return cuda_api().malloc_fn(ptr, size);
+}
+inline cudaError_t cuda_malloc_managed(void **ptr, std::size_t size) {
+  return cuda_api().malloc_managed_fn(ptr, size);
+}
+inline cudaError_t cuda_memset(void *ptr, int value, std::size_t size) {
+  return cuda_api().memset_fn(ptr, value, size);
+}
+inline cudaError_t cuda_free(void *ptr) { return cuda_api().free_fn(ptr); }
+inline cudaError_t cuda_get_last_error() { return cuda_api().get_last_error_fn(); }
+inline cudaError_t cuda_device_synchronize() {
+  return cuda_api().device_synchronize_fn();
+}
+
+struct CudaPtr {
+  void *p = nullptr;
+
+  CudaPtr() = default;
+  explicit CudaPtr(void *ptr) : p(ptr) {}
+  ~CudaPtr() { reset(); }
+
+  CudaPtr(const CudaPtr &) = delete;
+  CudaPtr &operator=(const CudaPtr &) = delete;
+
+  CudaPtr(CudaPtr &&other) noexcept : p(other.p) { other.p = nullptr; }
+  CudaPtr &operator=(CudaPtr &&other) noexcept {
+    if (this != &other) {
+      reset();
+      p = other.p;
+      other.p = nullptr;
+    }
+    return *this;
+  }
+
+  void reset(void *next = nullptr) {
+    if (p != nullptr) {
+      (void)cuda_free(p);
+    }
+    p = next;
+  }
+
+  void **out() { return &p; }
+
+  template <typename T> T *as() const { return static_cast<T *>(p); }
+  explicit operator bool() const { return p != nullptr; }
+};
+
 __device__ __constant__ int d_payA[4] = {Rw, Sw, Tw, Pw};
 __device__ __constant__ int d_payB[4] = {Rw, Tw, Sw, Pw};
 
@@ -652,8 +717,8 @@ void run_gpu(const Config &cfg) {
     total_span = compute_match_offsets(hparams, match_offsets);
   }
 
-  int *d_match_counts = nullptr;
-  float *d_match_q = nullptr;
+  CudaPtr d_match_counts;
+  CudaPtr d_match_q;
   if (total_span > 0) {
     const std::size_t max_size = std::numeric_limits<std::size_t>::max();
     if (total_span > max_size / sizeof(int)) {
@@ -666,38 +731,38 @@ void run_gpu(const Config &cfg) {
     }
     std::size_t counts_bytes = total_span * sizeof(int);
     std::size_t q_bytes = total_span * sizeof(float);
-    throw_if_cuda_error(cudaMalloc(&d_match_counts, counts_bytes),
+    throw_if_cuda_error(cuda_malloc(d_match_counts.out(), counts_bytes),
                         "cudaMalloc(&d_match_counts, counts_bytes)", __FILE__,
                         __LINE__);
-    throw_if_cuda_error(cudaMalloc(&d_match_q, q_bytes),
+    throw_if_cuda_error(cuda_malloc(d_match_q.out(), q_bytes),
                         "cudaMalloc(&d_match_q, q_bytes)", __FILE__, __LINE__);
-    throw_if_cuda_error(cudaMemset(d_match_counts, 0, counts_bytes),
+    throw_if_cuda_error(cuda_memset(d_match_counts.p, 0, counts_bytes),
                         "cudaMemset(d_match_counts, 0, counts_bytes)",
                         __FILE__, __LINE__);
-    throw_if_cuda_error(cudaMemset(d_match_q, 0, q_bytes),
+    throw_if_cuda_error(cuda_memset(d_match_q.p, 0, q_bytes),
                         "cudaMemset(d_match_q, 0, q_bytes)", __FILE__,
                         __LINE__);
   }
 
-  std::size_t *d_match_offsets = nullptr;
+  CudaPtr d_match_offsets;
   if (!match_offsets.empty()) {
     std::size_t offsets_bytes = match_offsets.size() * sizeof(std::size_t);
-    throw_if_cuda_error(cudaMallocManaged(&d_match_offsets, offsets_bytes),
+    throw_if_cuda_error(cuda_malloc_managed(d_match_offsets.out(), offsets_bytes),
                         "cudaMallocManaged(&d_match_offsets, offsets_bytes)",
                         __FILE__, __LINE__);
-    std::memcpy(d_match_offsets, match_offsets.data(), offsets_bytes);
+    std::memcpy(d_match_offsets.p, match_offsets.data(), offsets_bytes);
   }
 
-  AgentParams *d_params = nullptr;
-  long long *d_scores = nullptr;
-  throw_if_cuda_error(cudaMallocManaged(&d_params, n * sizeof(AgentParams)),
+  CudaPtr d_params;
+  CudaPtr d_scores;
+  throw_if_cuda_error(cuda_malloc_managed(d_params.out(), n * sizeof(AgentParams)),
                       "cudaMallocManaged(&d_params, n * sizeof(AgentParams))",
                       __FILE__, __LINE__);
-  throw_if_cuda_error(cudaMallocManaged(&d_scores, n * sizeof(long long)),
+  throw_if_cuda_error(cuda_malloc_managed(d_scores.out(), n * sizeof(long long)),
                       "cudaMallocManaged(&d_scores, n * sizeof(long long))",
                       __FILE__, __LINE__);
-  std::memcpy(d_params, hparams.data(), n * sizeof(AgentParams));
-  std::memset(d_scores, 0, n * sizeof(long long));
+  std::memcpy(d_params.p, hparams.data(), n * sizeof(AgentParams));
+  std::memset(d_scores.p, 0, n * sizeof(long long));
 
   if (total_pairs == 0) {
     std::fprintf(
@@ -715,12 +780,14 @@ void run_gpu(const Config &cfg) {
     int threads = threads_per_block;
     int blocks = static_cast<int>(blocks_ll);
 
-    play_all_pairs<<<blocks, threads>>>(d_params, n, rounds, seed,
-                                        d_match_offsets, d_match_counts,
-                                        d_match_q, d_scores);
-    throw_if_cuda_error(cudaGetLastError(), "cudaGetLastError()", __FILE__,
+    play_all_pairs<<<blocks, threads>>>(d_params.as<AgentParams>(), n, rounds, seed,
+                                        d_match_offsets.as<std::size_t>(),
+                                        d_match_counts.as<int>(),
+                                        d_match_q.as<float>(),
+                                        d_scores.as<long long>());
+    throw_if_cuda_error(cuda_get_last_error(), "cudaGetLastError()", __FILE__,
                         __LINE__);
-    throw_if_cuda_error(cudaDeviceSynchronize(), "cudaDeviceSynchronize()",
+    throw_if_cuda_error(cuda_device_synchronize(), "cudaDeviceSynchronize()",
                         __FILE__, __LINE__);
   }
 
@@ -728,16 +795,16 @@ void run_gpu(const Config &cfg) {
   long long minv = std::numeric_limits<long long>::max();
   long long maxv = std::numeric_limits<long long>::min();
   for (int i = 0; i < n; ++i) {
-    total += d_scores[i];
-    minv = std::min(minv, d_scores[i]);
-    maxv = std::max(maxv, d_scores[i]);
+    total += d_scores.as<long long>()[i];
+    minv = std::min(minv, d_scores.as<long long>()[i]);
+    maxv = std::max(maxv, d_scores.as<long long>()[i]);
   }
 
   long double mean = static_cast<long double>(total) /
                      static_cast<long double>(std::max(1, n));
   long double varacc = 0.0L;
   for (int i = 0; i < n; ++i) {
-    long double d = static_cast<long double>(d_scores[i]) - mean;
+    long double d = static_cast<long double>(d_scores.as<long long>()[i]) - mean;
     varacc += d * d;
   }
   long double variance = varacc / static_cast<long double>(n > 1 ? (n - 1) : 1);
@@ -752,7 +819,7 @@ void run_gpu(const Config &cfg) {
   std::array<long double, strategy_count> sum_by{};
   std::array<int, strategy_count> cnt_by{};
   for (int i = 0; i < n; ++i) {
-    sum_by[hparams[i].strat] += static_cast<long double>(d_scores[i]);
+    sum_by[hparams[i].strat] += static_cast<long double>(d_scores.as<long long>()[i]);
     cnt_by[hparams[i].strat]++;
   }
 
@@ -779,27 +846,13 @@ void run_gpu(const Config &cfg) {
 
   int show = dmin(10, n);
   std::vector<std::pair<int, long long>> ranked =
-      sorted_agent_scores(d_scores, n);
+      sorted_agent_scores(d_scores.as<long long>(), n);
   for (int r = 0; r < show && r < static_cast<int>(ranked.size()); ++r) {
     const auto &entry = ranked[r];
     int idx = entry.first;
     std::printf("agent[%d]: strat=%s score=%lld\n", idx,
                 names[hparams[idx].strat], entry.second);
   }
-
-  throw_if_cuda_error(cudaFree(d_params), "cudaFree(d_params)", __FILE__,
-                      __LINE__);
-  throw_if_cuda_error(cudaFree(d_scores), "cudaFree(d_scores)", __FILE__,
-                      __LINE__);
-  if (d_match_offsets)
-    throw_if_cuda_error(cudaFree(d_match_offsets), "cudaFree(d_match_offsets)",
-                        __FILE__, __LINE__);
-  if (d_match_counts)
-    throw_if_cuda_error(cudaFree(d_match_counts),
-                        "cudaFree(d_match_counts)", __FILE__, __LINE__);
-  if (d_match_q)
-    throw_if_cuda_error(cudaFree(d_match_q), "cudaFree(d_match_q)", __FILE__,
-                        __LINE__);
 }
 
 #ifndef DAMNATI_NO_MAIN

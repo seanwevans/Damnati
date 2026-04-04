@@ -1,5 +1,6 @@
 #define CATCH_CONFIG_MAIN
 #include "catch.hpp"
+#include <type_traits>
 
 #define DAMNATI_NO_MAIN
 #include "../damnati.cu"
@@ -21,6 +22,47 @@ bool ensure_cuda_device_available() {
   }
   return true;
 }
+
+struct FakeCudaState {
+  int malloc_calls = 0;
+  int free_calls = 0;
+};
+
+FakeCudaState *g_fake_cuda_state = nullptr;
+
+cudaError_t fake_cuda_malloc(void **ptr, std::size_t size) {
+  (void)size;
+  ++g_fake_cuda_state->malloc_calls;
+  if (g_fake_cuda_state->malloc_calls == 1) {
+    *ptr = std::malloc(8);
+    return (*ptr != nullptr) ? cudaSuccess : cudaErrorMemoryAllocation;
+  }
+  *ptr = nullptr;
+  return cudaErrorMemoryAllocation;
+}
+
+cudaError_t fake_cuda_malloc_managed(void **ptr, std::size_t size) {
+  return fake_cuda_malloc(ptr, size);
+}
+
+cudaError_t fake_cuda_memset(void *ptr, int value, std::size_t size) {
+  if (ptr == nullptr) {
+    return cudaErrorInvalidValue;
+  }
+  std::memset(ptr, value, size);
+  return cudaSuccess;
+}
+
+cudaError_t fake_cuda_free(void *ptr) {
+  if (ptr != nullptr) {
+    ++g_fake_cuda_state->free_calls;
+    std::free(ptr);
+  }
+  return cudaSuccess;
+}
+
+cudaError_t fake_cuda_get_last_error() { return cudaSuccess; }
+cudaError_t fake_cuda_device_synchronize() { return cudaSuccess; }
 
 } // namespace
 
@@ -482,6 +524,41 @@ TEST_CASE("throw_if_cuda_error throws runtime_error on failure", "[cuda][error]"
   REQUIRE_THROWS_AS(throw_if_cuda_error(cudaErrorInvalidValue,
                                         "cudaErrorInvalidValue", __FILE__,
                                         __LINE__), std::runtime_error);
+}
+
+TEST_CASE("run_gpu releases owned CUDA resources on allocation failure",
+          "[cuda][raii]") {
+  static_assert(!std::is_copy_constructible<CudaPtr>::value,
+                "CudaPtr must be non-copyable");
+  static_assert(std::is_move_constructible<CudaPtr>::value,
+                "CudaPtr must be moveable");
+
+  FakeCudaState state{};
+  g_fake_cuda_state = &state;
+  CudaApi api{};
+  api.malloc_fn = fake_cuda_malloc;
+  api.malloc_managed_fn = fake_cuda_malloc_managed;
+  api.memset_fn = fake_cuda_memset;
+  api.free_fn = fake_cuda_free;
+  api.get_last_error_fn = fake_cuda_get_last_error;
+  api.device_synchronize_fn = fake_cuda_device_synchronize;
+  set_cuda_api_for_testing(api);
+
+  Config cfg;
+  cfg.n_agents = 2;
+  cfg.rounds = 1;
+  cfg.seed = 7ULL;
+  cfg.p_ngram = 1.0f;
+  cfg.depth = 1;
+  cfg.epsilon = 0.0f;
+  cfg.gtft_p = 0.0f;
+
+  REQUIRE_THROWS_AS(run_gpu(cfg), std::runtime_error);
+  REQUIRE(state.malloc_calls >= 2);
+  REQUIRE(state.free_calls == 1);
+
+  reset_cuda_api_for_testing();
+  g_fake_cuda_state = nullptr;
 }
 
 TEST_CASE("run_gpu guards against oversized allocations", "[overflow][gpu]") {
