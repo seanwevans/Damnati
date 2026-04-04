@@ -730,7 +730,58 @@ constexpr const char kSummaryHeaderFmt[] =
     "{\"agents\":%d,\"rounds\":%d,\"p_ngram\":%.3f,\"depth\":%d,"
     "\"epsilon\":%.3f,\"gtft\":%.3f,\n";
 
+constexpr int kMinComputeCapabilityMajor = 6;
+constexpr int kMinComputeCapabilityMinor = 0;
+
+using CudaGetDeviceCountFn = cudaError_t (*)(int *);
+using CudaGetDevicePropertiesFn = cudaError_t (*)(cudaDeviceProp *, int);
+
+struct CudaDeviceQueryApi {
+  CudaGetDeviceCountFn get_device_count = cudaGetDeviceCount;
+  CudaGetDevicePropertiesFn get_device_properties = cudaGetDeviceProperties;
+};
+
+CudaDeviceQueryApi g_cuda_device_query_api{};
+
+std::string describe_device_capability(const cudaDeviceProp &props) {
+  return std::string(props.name) + " (compute capability " +
+         std::to_string(props.major) + "." + std::to_string(props.minor) + ")";
+}
+
+void ensure_runtime_compatibility() {
+  int device_count = 0;
+  throw_if_cuda_error(g_cuda_device_query_api.get_device_count(&device_count),
+                      "cudaGetDeviceCount(&device_count)", __FILE__, __LINE__);
+  if (device_count <= 0) {
+    throw std::runtime_error(
+        "Error: no CUDA device detected. Install an NVIDIA driver/CUDA runtime "
+        "and run on a GPU system.");
+  }
+
+  cudaDeviceProp first_props{};
+  throw_if_cuda_error(
+      g_cuda_device_query_api.get_device_properties(&first_props, 0),
+      "cudaGetDeviceProperties(&first_props, 0)", __FILE__, __LINE__);
+  const std::string selected = describe_device_capability(first_props);
+  const bool supported =
+      (first_props.major > kMinComputeCapabilityMajor) ||
+      (first_props.major == kMinComputeCapabilityMajor &&
+       first_props.minor >= kMinComputeCapabilityMinor);
+  if (!supported) {
+    throw std::runtime_error(
+        "Error: selected CUDA device " + selected +
+        " is unsupported. Damnati requires compute capability " +
+        std::to_string(kMinComputeCapabilityMajor) + "." +
+        std::to_string(kMinComputeCapabilityMinor) +
+        " or newer. Use a newer GPU or rebuild for a compatible target.");
+  }
+  std::fprintf(stderr, "CUDA runtime check: selected device %s.\n",
+               selected.c_str());
+}
+
 void run_gpu(const Config &cfg) {
+  ensure_runtime_compatibility();
+
   const int n = cfg.n_agents;
   const int rounds = cfg.rounds;
   const uint64_t seed = cfg.seed;
