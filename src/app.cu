@@ -13,6 +13,46 @@
 static const Strategy classics[12] = {AC,     AD,  TFT,  GTFT,   GRIM,   RANDOM,
                                       PAVLOV, ALT, JOSS, TESTER, REPEAT, S_TFT};
 
+constexpr int kMinComputeCapabilityMajor = 6;
+constexpr int kMinComputeCapabilityMinor = 0;
+
+CudaDeviceQueryApi g_cuda_device_query_api{};
+
+std::string describe_device_capability(const cudaDeviceProp &props) {
+  return std::string(props.name) + " (compute capability " +
+         std::to_string(props.major) + "." + std::to_string(props.minor) + ")";
+}
+
+void ensure_runtime_compatibility() {
+  int device_count = 0;
+  throw_if_cuda_error(g_cuda_device_query_api.get_device_count(&device_count),
+                      "cudaGetDeviceCount(&device_count)", __FILE__, __LINE__);
+  if (device_count <= 0) {
+    throw std::runtime_error(
+        "Error: no CUDA device detected. Install an NVIDIA driver/CUDA runtime "
+        "and run on a GPU system.");
+  }
+
+  cudaDeviceProp first_props{};
+  throw_if_cuda_error(
+      g_cuda_device_query_api.get_device_properties(&first_props, 0),
+      "cudaGetDeviceProperties(&first_props, 0)", __FILE__, __LINE__);
+  const std::string selected = describe_device_capability(first_props);
+  const bool supported = (first_props.major > kMinComputeCapabilityMajor) ||
+                         (first_props.major == kMinComputeCapabilityMajor &&
+                          first_props.minor >= kMinComputeCapabilityMinor);
+  if (!supported) {
+    throw std::runtime_error(
+        "Error: selected CUDA device " + selected +
+        " is unsupported. Damnati requires compute capability " +
+        std::to_string(kMinComputeCapabilityMajor) + "." +
+        std::to_string(kMinComputeCapabilityMinor) +
+        " or newer. Use a newer GPU or rebuild for a compatible target.");
+  }
+  std::fprintf(stderr, "CUDA runtime check: selected device %s.\n",
+               selected.c_str());
+}
+
 int build_population(const Config &cfg, std::vector<AgentParams> &hparams) {
   const int n = cfg.n_agents;
   const int n_ng = int(cfg.p_ngram * n + 0.5f);
@@ -39,6 +79,8 @@ int build_population(const Config &cfg, std::vector<AgentParams> &hparams) {
 }
 
 void run_gpu(const Config &cfg) {
+  ensure_runtime_compatibility();
+
   const int n = cfg.n_agents;
   const int rounds = cfg.rounds;
   const uint64_t seed = cfg.seed;
@@ -89,8 +131,8 @@ void run_gpu(const Config &cfg) {
     throw_if_cuda_error(cudaMalloc(&d_match_q, q_bytes),
                         "cudaMalloc(&d_match_q, q_bytes)", __FILE__, __LINE__);
     throw_if_cuda_error(cudaMemset(d_match_counts, 0, counts_bytes),
-                        "cudaMemset(d_match_counts, 0, counts_bytes)",
-                        __FILE__, __LINE__);
+                        "cudaMemset(d_match_counts, 0, counts_bytes)", __FILE__,
+                        __LINE__);
     throw_if_cuda_error(cudaMemset(d_match_q, 0, q_bytes),
                         "cudaMemset(d_match_q, 0, q_bytes)", __FILE__,
                         __LINE__);
@@ -151,8 +193,8 @@ void run_gpu(const Config &cfg) {
     throw_if_cuda_error(cudaFree(d_match_offsets), "cudaFree(d_match_offsets)",
                         __FILE__, __LINE__);
   if (d_match_counts)
-    throw_if_cuda_error(cudaFree(d_match_counts),
-                        "cudaFree(d_match_counts)", __FILE__, __LINE__);
+    throw_if_cuda_error(cudaFree(d_match_counts), "cudaFree(d_match_counts)",
+                        __FILE__, __LINE__);
   if (d_match_q)
     throw_if_cuda_error(cudaFree(d_match_q), "cudaFree(d_match_q)", __FILE__,
                         __LINE__);
