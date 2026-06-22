@@ -15,6 +15,9 @@
 static const Strategy classics[12] = {AC,     AD,  TFT,  GTFT,   GRIM,   RANDOM,
                                       PAVLOV, ALT, JOSS, TESTER, REPEAT, S_TFT};
 
+constexpr int kMinComputeCapabilityMajor = 6;
+constexpr int kMinComputeCapabilityMinor = 0;
+
 CudaDeviceQueryApi g_cuda_device_query_api{};
 
 std::string describe_device_capability(const cudaDeviceProp &props) {
@@ -78,6 +81,8 @@ int build_population(const Config &cfg, std::vector<AgentParams> &hparams) {
 }
 
 void run_gpu(const Config &cfg) {
+  ensure_runtime_compatibility();
+
   const int n = cfg.n_agents;
   const int rounds = cfg.rounds;
   const uint64_t seed = cfg.seed;
@@ -128,6 +133,13 @@ void run_gpu(const Config &cfg) {
     throw_if_cuda_error(cuda_malloc(d_match_q.out(), q_bytes),
                         "cuda_malloc(d_match_q.out(), q_bytes)", __FILE__,
                         __LINE__);
+    throw_if_cuda_error(cudaMalloc(&d_match_q, q_bytes),
+                        "cudaMalloc(&d_match_q, q_bytes)", __FILE__, __LINE__);
+    throw_if_cuda_error(cudaMemset(d_match_counts, 0, counts_bytes),
+                        "cudaMemset(d_match_counts, 0, counts_bytes)", __FILE__,
+                        __LINE__);
+    throw_if_cuda_error(cudaMemset(d_match_q, 0, q_bytes),
+                        "cudaMemset(d_match_q, 0, q_bytes)", __FILE__,
     throw_if_cuda_error(cuda_memset(d_match_counts.p, 0, counts_bytes),
                         "cuda_memset(d_match_counts.p, 0, counts_bytes)",
                         __FILE__, __LINE__);
@@ -192,5 +204,20 @@ void run_gpu(const Config &cfg) {
                         __FILE__, __LINE__);
   }
 
+  print_summary_report(cfg, hparams, d_scores);
+
+  throw_if_cuda_error(cudaFree(d_params), "cudaFree(d_params)", __FILE__,
+                      __LINE__);
+  throw_if_cuda_error(cudaFree(d_scores), "cudaFree(d_scores)", __FILE__,
+                      __LINE__);
+  if (d_match_offsets)
+    throw_if_cuda_error(cudaFree(d_match_offsets), "cudaFree(d_match_offsets)",
+                        __FILE__, __LINE__);
+  if (d_match_counts)
+    throw_if_cuda_error(cudaFree(d_match_counts), "cudaFree(d_match_counts)",
+                        __FILE__, __LINE__);
+  if (d_match_q)
+    throw_if_cuda_error(cudaFree(d_match_q), "cudaFree(d_match_q)", __FILE__,
+                        __LINE__);
   print_summary_report(cfg, hparams, d_scores.as<long long>());
 }
