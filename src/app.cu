@@ -5,7 +5,9 @@
 #include <limits>
 #include <random>
 #include <stdexcept>
+#include <string>
 
+#include "cuda_api.hpp"
 #include "kernel.hpp"
 #include "reporting.hpp"
 #include "strategy.hpp"
@@ -111,8 +113,8 @@ void run_gpu(const Config &cfg) {
     total_span = compute_match_offsets(hparams, match_offsets);
   }
 
-  int *d_match_counts = nullptr;
-  float *d_match_q = nullptr;
+  CudaPtr d_match_counts;
+  CudaPtr d_match_q;
   if (total_span > 0) {
     const std::size_t max_size = std::numeric_limits<std::size_t>::max();
     if (total_span > max_size / sizeof(int)) {
@@ -125,8 +127,11 @@ void run_gpu(const Config &cfg) {
     }
     std::size_t counts_bytes = total_span * sizeof(int);
     std::size_t q_bytes = total_span * sizeof(float);
-    throw_if_cuda_error(cudaMalloc(&d_match_counts, counts_bytes),
-                        "cudaMalloc(&d_match_counts, counts_bytes)", __FILE__,
+    throw_if_cuda_error(cuda_malloc(d_match_counts.out(), counts_bytes),
+                        "cuda_malloc(d_match_counts.out(), counts_bytes)",
+                        __FILE__, __LINE__);
+    throw_if_cuda_error(cuda_malloc(d_match_q.out(), q_bytes),
+                        "cuda_malloc(d_match_q.out(), q_bytes)", __FILE__,
                         __LINE__);
     throw_if_cuda_error(cudaMalloc(&d_match_q, q_bytes),
                         "cudaMalloc(&d_match_q, q_bytes)", __FILE__, __LINE__);
@@ -135,28 +140,43 @@ void run_gpu(const Config &cfg) {
                         __LINE__);
     throw_if_cuda_error(cudaMemset(d_match_q, 0, q_bytes),
                         "cudaMemset(d_match_q, 0, q_bytes)", __FILE__,
+    throw_if_cuda_error(cuda_memset(d_match_counts.p, 0, counts_bytes),
+                        "cuda_memset(d_match_counts.p, 0, counts_bytes)",
+                        __FILE__, __LINE__);
+    throw_if_cuda_error(cuda_memset(d_match_q.p, 0, q_bytes),
+                        "cuda_memset(d_match_q.p, 0, q_bytes)", __FILE__,
                         __LINE__);
+    throw_if_cuda_error(
+        cuda_memset(d_match_counts.as<int>(), 0, counts_bytes),
+        "cuda_memset(d_match_counts.as<int>(), 0, counts_bytes)", __FILE__,
+        __LINE__);
+    throw_if_cuda_error(cuda_memset(d_match_q.as<float>(), 0, q_bytes),
+                        "cuda_memset(d_match_q.as<float>(), 0, q_bytes)",
+                        __FILE__, __LINE__);
   }
 
-  std::size_t *d_match_offsets = nullptr;
+  CudaPtr d_match_offsets;
   if (!match_offsets.empty()) {
     std::size_t offsets_bytes = match_offsets.size() * sizeof(std::size_t);
-    throw_if_cuda_error(cudaMallocManaged(&d_match_offsets, offsets_bytes),
-                        "cudaMallocManaged(&d_match_offsets, offsets_bytes)",
-                        __FILE__, __LINE__);
-    std::memcpy(d_match_offsets, match_offsets.data(), offsets_bytes);
+    throw_if_cuda_error(
+        cuda_malloc_managed(d_match_offsets.out(), offsets_bytes),
+        "cuda_malloc_managed(d_match_offsets.out(), offsets_bytes)", __FILE__,
+        __LINE__);
+    std::memcpy(d_match_offsets.p, match_offsets.data(), offsets_bytes);
   }
 
-  AgentParams *d_params = nullptr;
-  long long *d_scores = nullptr;
-  throw_if_cuda_error(cudaMallocManaged(&d_params, n * sizeof(AgentParams)),
-                      "cudaMallocManaged(&d_params, n * sizeof(AgentParams))",
-                      __FILE__, __LINE__);
-  throw_if_cuda_error(cudaMallocManaged(&d_scores, n * sizeof(long long)),
-                      "cudaMallocManaged(&d_scores, n * sizeof(long long))",
-                      __FILE__, __LINE__);
-  std::memcpy(d_params, hparams.data(), n * sizeof(AgentParams));
-  std::memset(d_scores, 0, n * sizeof(long long));
+  CudaPtr d_params;
+  CudaPtr d_scores;
+  throw_if_cuda_error(
+      cuda_malloc_managed(d_params.out(), n * sizeof(AgentParams)),
+      "cuda_malloc_managed(d_params.out(), n * sizeof(AgentParams))", __FILE__,
+      __LINE__);
+  throw_if_cuda_error(
+      cuda_malloc_managed(d_scores.out(), n * sizeof(long long)),
+      "cuda_malloc_managed(d_scores.out(), n * sizeof(long long))", __FILE__,
+      __LINE__);
+  std::memcpy(d_params.p, hparams.data(), n * sizeof(AgentParams));
+  std::memset(d_scores.p, 0, n * sizeof(long long));
 
   if (total_pairs == 0) {
     std::fprintf(
@@ -174,12 +194,13 @@ void run_gpu(const Config &cfg) {
     int threads = threads_per_block;
     int blocks = static_cast<int>(blocks_ll);
 
-    play_all_pairs<<<blocks, threads>>>(d_params, n, rounds, seed,
-                                        d_match_offsets, d_match_counts,
-                                        d_match_q, d_scores);
-    throw_if_cuda_error(cudaGetLastError(), "cudaGetLastError()", __FILE__,
-                        __LINE__);
-    throw_if_cuda_error(cudaDeviceSynchronize(), "cudaDeviceSynchronize()",
+    play_all_pairs<<<blocks, threads>>>(
+        d_params.as<AgentParams>(), n, rounds, seed,
+        d_match_offsets.as<std::size_t>(), d_match_counts.as<int>(),
+        d_match_q.as<float>(), d_scores.as<long long>());
+    throw_if_cuda_error(cuda_get_last_error(), "cuda_get_last_error()",
+                        __FILE__, __LINE__);
+    throw_if_cuda_error(cuda_device_synchronize(), "cuda_device_synchronize()",
                         __FILE__, __LINE__);
   }
 
@@ -198,4 +219,5 @@ void run_gpu(const Config &cfg) {
   if (d_match_q)
     throw_if_cuda_error(cudaFree(d_match_q), "cudaFree(d_match_q)", __FILE__,
                         __LINE__);
+  print_summary_report(cfg, hparams, d_scores.as<long long>());
 }

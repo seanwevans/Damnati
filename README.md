@@ -15,7 +15,7 @@ Damnati is a CUDA-accelerated tournament simulator for the Iterated Prisoner's D
 The program requires the NVIDIA CUDA toolkit. Build the executable with `nvcc`:
 
 ```bash
-nvcc -O3 -arch=sm_86 damnati.cu -o damnati
+nvcc -O3 -arch=sm_86 -rdc=true damnati.cu src/cli.cu src/strategy.cu src/kernel.cu src/reporting.cu src/app.cu -o damnati
 ```
 
 ## Usage

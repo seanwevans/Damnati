@@ -88,8 +88,9 @@ void print_summary_report(const Config &cfg,
   }
   std::printf("}}\n");
 
-  int show = dmin(10, n);
-  std::vector<std::pair<int, long long>> ranked = sorted_agent_scores(scores, n);
+  int show = std::min(10, n);
+  std::vector<std::pair<int, long long>> ranked =
+      sorted_agent_scores(scores, n);
   for (int r = 0; r < show && r < static_cast<int>(ranked.size()); ++r) {
     const auto &entry = ranked[r];
     int idx = entry.first;
