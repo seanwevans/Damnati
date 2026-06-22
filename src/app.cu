@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "cuda_api.hpp"
 #include "kernel.hpp"
 #include "reporting.hpp"
 #include "strategy.hpp"
@@ -133,6 +134,13 @@ void run_gpu(const Config &cfg) {
     throw_if_cuda_error(cuda_memset(d_match_q.p, 0, q_bytes),
                         "cuda_memset(d_match_q.p, 0, q_bytes)", __FILE__,
                         __LINE__);
+    throw_if_cuda_error(
+        cuda_memset(d_match_counts.as<int>(), 0, counts_bytes),
+        "cuda_memset(d_match_counts.as<int>(), 0, counts_bytes)", __FILE__,
+        __LINE__);
+    throw_if_cuda_error(cuda_memset(d_match_q.as<float>(), 0, q_bytes),
+                        "cuda_memset(d_match_q.as<float>(), 0, q_bytes)",
+                        __FILE__, __LINE__);
   }
 
   CudaPtr d_match_offsets;
